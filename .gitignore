@@ -1,0 +1,38 @@
+# ───── Python / FastAPI (apps/api) ─────
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.db
+*.sqlite3
+
+# ───── Node / Vite (apps/web) ─────
+node_modules/
+dist/
+coverage/
+*.local
+.vite/
+
+# ───── Secrets / env ─────
+.env
+.env.local
+.env.*.local
+# (versionamos .env.example)
+
+# ───── Editor / OS ─────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ───── Playwright ─────
+playwright-report/
+test-results/
+/apps/web/playwright/.cache/
+
+# ───── Docker ─────
+*.pid
