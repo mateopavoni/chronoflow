@@ -1,0 +1,10 @@
+{
+  // ESLint-only TS project: inherits the app compiler options but INCLUDES test
+  // files (which tsconfig.app.json deliberately excludes so the Docker prod build
+  // doesn't typecheck Node test globals — see stacks/react-vite.md gotcha).
+  // Explicit empty exclude + broad include pull tests back in for typed linting
+  // without affecting the build.
+  "extends": "./tsconfig.app.json",
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts", "vitest.config.ts"],
+  "exclude": []
+}
