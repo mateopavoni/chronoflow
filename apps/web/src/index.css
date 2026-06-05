@@ -1,0 +1,169 @@
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Conductor OS — theme tokens (RGB channels, consumed by tailwind.config.js).
+   :root = light mode. .dark = dark mode. Flipping the class on <html> is enough.
+   ─────────────────────────────────────────────────────────────────────────── */
+:root {
+  /* Light — pure paper, zinc structural tones */
+  --background: 255 255 255;
+  --surface: 255 255 255;
+  --surface-dim: 250 250 250;
+  --surface-container-lowest: 250 250 250;
+  --surface-container-low: 244 244 245;
+  --surface-container: 244 244 245;
+  --surface-container-high: 228 228 231;
+  --surface-container-highest: 212 212 216;
+  --on-surface: 24 24 27;
+  --on-surface-variant: 82 82 91;
+  --outline: 113 113 122;
+  --outline-variant: 228 228 231;
+  --primary: 24 24 27;
+  --on-primary: 250 250 250;
+  --primary-container: 39 39 42;
+  --on-primary-container: 250 250 250;
+  --secondary: 82 82 91;
+  --error: 220 38 38;
+  --status-success: 22 163 74;
+  --status-warning: 217 119 6;
+  --status-error: 220 38 38;
+  --status-running: 37 99 235;
+  /* Dot-matrix dot color for the canvas */
+  --dot: 212 212 216;
+  color-scheme: light;
+}
+
+.dark {
+  /* Dark — Conductor OS exported palette */
+  --background: 18 19 26;
+  --surface: 18 19 26;
+  --surface-dim: 18 19 26;
+  --surface-container-lowest: 13 14 21;
+  --surface-container-low: 26 27 34;
+  --surface-container: 30 31 38;
+  --surface-container-high: 41 41 49;
+  --surface-container-highest: 51 52 60;
+  --on-surface: 227 225 236;
+  --on-surface-variant: 196 199 200;
+  --outline: 142 145 146;
+  --outline-variant: 68 71 72;
+  --primary: 255 255 255;
+  --on-primary: 47 49 49;
+  --primary-container: 226 226 226;
+  --on-primary-container: 99 101 101;
+  --secondary: 200 198 201;
+  --error: 255 180 171;
+  --status-success: 74 222 128;
+  --status-warning: 251 191 36;
+  --status-error: 248 113 113;
+  --status-running: 96 165 250;
+  --dot: 51 52 60;
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-background text-on-surface antialiased;
+  font-family: 'IBM Plex Sans', system-ui, -apple-system, sans-serif;
+}
+
+/* Dot-matrix canvas background (used behind the DAG editor/debugger) */
+.dot-matrix {
+  background-color: rgb(var(--background));
+  background-image: radial-gradient(rgb(var(--dot)) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* Thin industrial scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: rgb(var(--surface-container-low));
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--surface-container-highest));
+  border-radius: 0;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--outline));
+}
+
+/* Native range slider — square, monochrome */
+input[type='range'] {
+  cursor: pointer;
+  accent-color: rgb(var(--primary));
+}
+
+/* Native <dialog> reset (used by Modal) */
+dialog {
+  background: transparent;
+  color: inherit;
+  max-width: 100vw;
+  max-height: 100vh;
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   React Flow — bend the canvas to the theme tokens.
+   ─────────────────────────────────────────────────────────────────────────── */
+.react-flow {
+  @apply h-full w-full;
+  background-color: rgb(var(--background));
+}
+.react-flow__background {
+  background-color: rgb(var(--background));
+}
+.react-flow__edge-path {
+  stroke: rgb(var(--outline));
+  stroke-width: 1.5;
+}
+.react-flow__edge-text {
+  fill: rgb(var(--on-surface-variant));
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+}
+.react-flow__edge-textbg {
+  fill: rgb(var(--surface));
+}
+.react-flow__arrowhead {
+  fill: rgb(var(--outline));
+}
+.react-flow__controls {
+  border: 1px solid rgb(var(--outline-variant));
+  box-shadow: none;
+}
+.react-flow__controls-button {
+  background: rgb(var(--surface));
+  border-bottom: 1px solid rgb(var(--outline-variant));
+  color: rgb(var(--on-surface));
+}
+.react-flow__controls-button:hover {
+  background: rgb(var(--surface-container-high));
+}
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+.react-flow__minimap {
+  background: rgb(var(--surface-container-low));
+  border: 1px solid rgb(var(--outline-variant));
+}
+.react-flow__attribution {
+  background: transparent;
+  color: rgb(var(--on-surface-variant));
+}
+.react-flow__attribution a {
+  color: rgb(var(--on-surface-variant));
+}
