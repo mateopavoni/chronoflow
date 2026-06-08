@@ -128,20 +128,6 @@ cd apps/web && npm run test  # Vitest (componentes + hooks)
 
 ---
 
-## Changelog
-| Versión | Fecha | Cambio |
-|---------|-------|--------|
-| v0.1.0  | 2026-06-03 | Scaffold del monorepo + arquitectura + documentación inicial |
-| v0.1.1  | 2026-06-04 | Fixes de arranque en Docker: path de Alembic, exclusión de tests del build de producción del front, y buffers de header de nginx (cookies grandes de localhost). Stack verificado end-to-end (`docker compose up`) |
-| v0.2.0  | 2026-06-06 | Restyle al design system **Conductor OS** (Swiss Minimalist): **tema claro/oscuro** con tokens semánticos (CSS vars), íconos `lucide-react` (sin emojis), tabla de alta densidad, nodos e inspector estilo consola. ESLint con typed-linting de tests. Re-verificado con build fresco + smoke test |
-| v0.2.1  | 2026-06-08 | Fixes de UX de errores: el cliente API formatea `detail` estructurado (`{message, errors}`) y errores de Pydantic en vez de mostrar `[object Object]` (p.ej. runear un grafo sin nodos ahora lista los errores de validación reales). Los handlers (`run`/`save`/`validate`/`replay`) capturan la rejección de `mutateAsync` → no más `Uncaught (in promise) ApiError` en consola. **Run ahora guarda el canvas antes de ejecutar** (Run corre el grafo guardado: sin esto se ejecutaba un grafo viejo/vacío y daba un 422 confuso por nodos que sí estaban en pantalla). **Pre-validación en el cliente** (vacío / sin start / sin end) antes de llamar a `/run`: un grafo obviamente no ejecutable muestra el mensaje al instante, sin disparar el POST que ensuciaba la consola con un `422`. WebSocket más robusto: no reinyecta frames de control (`run_finished`/`error`) como eventos —evita corromper el timeline— y no reconecta en cierres de aplicación (`4xxx`, p.ej. run inexistente) —corta el storm de reconexión— |
-| v0.2.2  | 2026-06-08 | **Fix: el nodo `start` faltaba en la paleta** del editor → era imposible construir un workflow desde cero (el validador exige exactamente un `start`, pero la UI no dejaba agregarlo; solo funcionaba editando los workflows seed). Agregado a `NodePalette`. Documentación: sección **"Probalo en 2 minutos"** (guía sobre los 3 workflows seed), `LICENSE` MIT y badges de stack/licencia |
-| v0.2.3  | 2026-06-08 | **Editor con atajos de teclado**: `Ctrl+Z`/`Ctrl+Shift+Z` (deshacer/rehacer sobre un historial de hasta 50 snapshots), `Ctrl+C`/`Ctrl+X`/`Ctrl+V` (copiar/cortar/pegar nodos + sus edges internos, con ids nuevos y offset) y `Supr`/`Backspace` (borrar selección). Botones Undo/Redo en la toolbar. Lógica de clipboard extraída a `lib/clipboard.ts` (pura, +6 tests). Fix de lint pre-existente en `useRunStream.ts` (aserción `as string` redundante). **UI consolidada 100% en inglés** (mensajes del `precheckGraph` + tooltips Undo/Redo que estaban en español) — convención: UI en inglés, docs en español |
-| v0.2.4  | 2026-06-08 | **Borrar workflow ahora es un modal in-app**, no el `window.confirm` del navegador (muestra el nombre, maneja error de borrado y estado pending). **Multi-selección con `Shift`+click** en el canvas (`multiSelectionKeyCode`), unificada con el box-select de `Shift`+arrastre; el Shift+click ya no abre el drawer de config para no pisar el gesto de selección |
-| v0.2.5  | 2026-06-08 | **Cambio de tipografía**: se reemplaza el dúo `Inter` + `JetBrains Mono` (el default genérico de mil dashboards) por la superfamilia **IBM Plex Sans + IBM Plex Mono**, más coherente con el aesthetic *industrial console* de Conductor OS y con más carácter propio. Tocado en `index.css` (import de Google Fonts + `body` + `react-flow__edge-text`) y `tailwind.config.js` (`fontFamily.sans`/`.mono`) |
-
----
-
 ## Licencia
 
 [MIT](./LICENSE) © Mateo Pavoni
