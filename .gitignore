@@ -36,3 +36,14 @@ test-results/
 
 # ───── Docker ─────
 *.pid
+
+# ───── Notas y scratch local (no publicar) ─────
+/.claude/
+/PORTFOLIO.md
+/TASKS.md
+/commit-plan.md
+/commit-plan.ps1
+/build-history.ps1
+/memory/
+/apps/web/stitch/
+*.tsbuildinfo
