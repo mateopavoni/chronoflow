@@ -5,7 +5,7 @@
 > **Time-Travel Debugging**: recorré, auditá y reproducí el estado histórico de cualquier
 > ejecución, nodo por nodo.
 
-![stack](https://img.shields.io/badge/stack-React%20Flow%20·%20FastAPI%20·%20PostgreSQL%20·%20asyncio-2b2b2b)  ·  ![license](https://img.shields.io/badge/license-MIT-blue)
+![stack](https://img.shields.io/badge/stack-React%20Flow%20·%20FastAPI%20·%20PostgreSQL%20·%20asyncio-2b2b2b)  ·  ![license](https://img.shields.io/badge/license-proprietary-red)
 <!-- Cuando haya deploy: reemplazar por [![demo](https://img.shields.io/badge/demo-live-brightgreen)](URL_REAL) -->
 
 Stack: **React Flow · FastAPI · PostgreSQL · asyncio**
@@ -130,6 +130,8 @@ cd apps/web && npm run test  # Vitest (componentes + hooks)
 
 ## Licencia
 
-[MIT](./LICENSE) © Mateo Pavoni
+© 2026 Mateo Pavoni. Todos los derechos reservados. Software propietario, publicado solo con
+fines de evaluación/portfolio. Prohibida su copia, redistribución o reuso sin autorización
+escrita. Ver [LICENSE](./LICENSE).
 
 
