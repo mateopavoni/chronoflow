@@ -66,9 +66,12 @@ async function parseResponse<T>(res: Response): Promise<T> {
   return isJson ? ((await res.json()) as T) : (undefined as T)
 }
 
+// credentials: 'include' sends the httpOnly session cookie on every request
+// (auth lives in the cookie, not in JS). Requires CORS allow_credentials on the API.
 export async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     headers: { Accept: 'application/json' },
+    credentials: 'include',
   })
   return parseResponse<T>(res)
 }
@@ -78,6 +81,7 @@ export async function post<T>(path: string, body?: unknown): Promise<T> {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    credentials: 'include',
   })
   return parseResponse<T>(res)
 }
@@ -87,12 +91,13 @@ export async function put<T>(path: string, body: unknown): Promise<T> {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify(body),
+    credentials: 'include',
   })
   return parseResponse<T>(res)
 }
 
 export async function del(path: string): Promise<void> {
-  const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE' })
+  const res = await fetch(`${API_BASE}${path}`, { method: 'DELETE', credentials: 'include' })
   return parseResponse<void>(res)
 }
 
