@@ -337,7 +337,7 @@ export function Editor() {
       await persistGraph()
       const run = await runMutation.mutateAsync({ id, payload })
       setShowRunModal(false)
-      navigate(`/runs/${run.id}`)
+      navigate(`/app/runs/${run.id}`)
     } catch {
       // Deeper validation/run errors are shown by the ErrorBanner via runMutation.isError.
       // Keep the modal open so the user can read the message and fix the graph.
@@ -361,7 +361,7 @@ export function Editor() {
       {/* Toolbar */}
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-outline-variant bg-surface px-container-margin py-2">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/app')}
           className="flex items-center gap-1 font-mono text-label-xs uppercase tracking-wide text-on-surface-variant transition-colors hover:text-on-surface"
           aria-label="Back to workflows"
         >
