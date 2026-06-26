@@ -1,0 +1,32 @@
+name: deploy
+
+# Push a main en GitHub -> deploya api + web a Dokku (mismo modelo que deploy.ps1).
+on:
+  push:
+    branches: [main]
+
+# Un solo deploy a la vez; cancela el anterior si pusheás seguido.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Dokku necesita la historia, no un shallow clone
+
+      - name: Configurar SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DOKKU_SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 146.181.35.182 >> ~/.ssh/known_hosts
+
+      - name: Deploy API
+        run: git push --force dokku@146.181.35.182:chronoflow-api HEAD:main
+
+      - name: Deploy WEB
+        run: git push --force dokku@146.181.35.182:chronoflow-web HEAD:main
