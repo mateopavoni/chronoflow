@@ -15,7 +15,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -70,14 +70,31 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Security headers ──────────────────────────────────────────────────────────
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Baseline security headers. HSTS only in prod (https)."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if not settings.is_dev:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
 # ─── Routers ──────────────────────────────────────────────────────────────────
 
 from app.api.routes import (  # noqa: E402
+    auth,
     runs,
     workflows,
     ws,  # noqa: E402
 )
 
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(workflows.router, prefix="/api/workflows", tags=["workflows"])
 app.include_router(runs.router, prefix="/api/runs", tags=["runs"])
 app.include_router(ws.router, prefix="/api/ws", tags=["websocket"])
