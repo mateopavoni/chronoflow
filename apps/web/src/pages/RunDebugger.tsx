@@ -105,7 +105,7 @@ export function RunDebugger() {
   async function handleReplay() {
     try {
       const newRun = await replayMutation.mutateAsync(id)
-      navigate(`/runs/${newRun.id}`)
+      navigate(`/app/runs/${newRun.id}`)
     } catch {
       // Surfaced via replayMutation state; swallow to avoid an unhandled rejection.
     }
@@ -129,7 +129,7 @@ export function RunDebugger() {
       {/* Header */}
       <header className="flex shrink-0 flex-wrap items-center gap-3 border-b border-outline-variant bg-surface px-container-margin py-2">
         <button
-          onClick={() => navigate(`/workflows/${runData.workflow_id}`)}
+          onClick={() => navigate(`/app/workflows/${runData.workflow_id}`)}
           className="flex items-center gap-1 font-mono text-label-xs uppercase tracking-wide text-on-surface-variant transition-colors hover:text-on-surface"
         >
           <ArrowLeft size={14} /> Editor

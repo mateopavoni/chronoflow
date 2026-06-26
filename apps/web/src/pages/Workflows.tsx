@@ -32,7 +32,7 @@ export function Workflows() {
         edges: [{ id: 'e-start-end', source: 'start-1', target: 'end-1' }],
       },
     })
-    navigate(`/workflows/${result.id}`)
+    navigate(`/app/workflows/${result.id}`)
   }
 
   function requestDelete(workflow: WorkflowOut, e: React.MouseEvent) {
@@ -112,7 +112,7 @@ export function Workflows() {
               <WorkflowRow
                 key={wf.id}
                 workflow={wf}
-                onClick={() => navigate(`/workflows/${wf.id}`)}
+                onClick={() => navigate(`/app/workflows/${wf.id}`)}
                 onDelete={(e) => requestDelete(wf, e)}
                 deleting={deleteMutation.isPending && deleteMutation.variables === wf.id}
               />
