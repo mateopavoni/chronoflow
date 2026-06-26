@@ -93,8 +93,13 @@ npm run dev                        # http://localhost:5173
 Al levantar, el backend **siembra 3 workflows de ejemplo** automáticamente. No hace falta crear nada
 para ver las features clave. Entrá a la web (`:8080` con Docker, `:5173` en dev) y:
 
+**0. Landing + cuenta** — `/` es la **landing pública**. Hacé **Get started / Register** (`/register`),
+creá una cuenta con un email y una contraseña de **≥ 8 caracteres**. Quedás logueado por una **cookie
+de sesión httpOnly** y entrás al hub en **`/app`**. (Después podés probar **Login**/**Logout** desde
+la barra superior; sin sesión, cualquier `/app/*` te redirige a `/login`.)
+
 **1. Paralelismo real** — abrí **"Parallel Delays Demo"** → **Run** con payload `{}`.
-Dos `delay` (3s y 1s) corren a la vez: la corrida termina en **~3s, no 4s**. En `/runs/:id` movés
+Dos `delay` (3s y 1s) corren a la vez: la corrida termina en **~3s, no 4s**. En `/app/runs/:id` movés
 el **scrubber** y ves ambos nodos arrancar en el mismo instante.
 
 **2. Branch + JSONPath + HTTP** — abrí **"Branch + Transform + HTTP"** (condición `$.trigger.amount > 100`):
@@ -104,10 +109,10 @@ el **scrubber** y ves ambos nodos arrancar en el mismo instante.
 | `{"amount": 50, "note": "low"}` | rama **false** → pasa derecho (ves la **poda** de la rama no tomada) |
 
 **3. Time-Travel** — abrí **"Simple Pipeline"** → **Run** con `{"user_id": 1, "action": "login"}`.
-En `/runs/:id` recorré los **snapshots inmutables** por nodo (input/output en cada paso) y probá **Replay**.
+En `/app/runs/:id` recorré los **snapshots inmutables** por nodo (input/output en cada paso) y probá **Replay**.
 
-**4. Editor desde cero** — desde el hub creás un workflow y armás el grafo con la paleta de la izquierda:
-`start → … → end`. Recordá la regla del validador: **exactamente un `start`** y al menos un `end`.
+**4. Editor desde cero** — desde el hub (`/app`) creás un workflow y armás el grafo con la paleta de la
+izquierda: `start → … → end`. Recordá la regla del validador: **exactamente un `start`** y al menos un `end`.
 
 > Guía de pruebas exhaustiva (rutas de smoke-test, errores esperados, WS en vivo): **[`docs/QA-CHECKLIST.md`](./docs/QA-CHECKLIST.md)**.
 
