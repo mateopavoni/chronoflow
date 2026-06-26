@@ -29,4 +29,6 @@ EXPOSE 8000
 # Startup: run Alembic migrations, then start uvicorn.
 # Note: In production you'd separate migration from app start.
 # Convenient for local development.
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# --proxy-headers + --forwarded-allow-ips='*': honrar X-Forwarded-Proto del proxy TLS
+# de Dokku para que los 307 (trailing slash) redirijan con https, no http (mixed content).
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]

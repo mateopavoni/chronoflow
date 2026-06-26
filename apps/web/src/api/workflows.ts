@@ -2,11 +2,13 @@ import { del, get, post, put } from './client'
 import type { ValidationResult, WorkflowIn, WorkflowOut } from '../types/api'
 
 export const workflowsApi = {
-  list: (): Promise<WorkflowOut[]> => get('/workflows'),
+  // Barra final: la ruta es /api/workflows/ — sin barra, FastAPI 307 a la
+  // versión con barra y, detrás del proxy TLS, la degrada a http (mixed content).
+  list: (): Promise<WorkflowOut[]> => get('/workflows/'),
 
   get: (id: string): Promise<WorkflowOut> => get(`/workflows/${id}`),
 
-  create: (data: WorkflowIn): Promise<WorkflowOut> => post('/workflows', data),
+  create: (data: WorkflowIn): Promise<WorkflowOut> => post('/workflows/', data),
 
   update: (id: string, data: WorkflowIn): Promise<WorkflowOut> => put(`/workflows/${id}`, data),
 

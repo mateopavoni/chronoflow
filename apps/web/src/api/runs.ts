@@ -3,7 +3,7 @@ import type { ExecutionEventOut, RunOut } from '../types/api'
 
 export const runsApi = {
   list: (workflowId?: string): Promise<RunOut[]> =>
-    get(`/runs${workflowId ? `?workflow_id=${workflowId}` : ''}`),
+    get(`/runs/${workflowId ? `?workflow_id=${workflowId}` : ''}`),
 
   get: (id: string): Promise<RunOut> => get(`/runs/${id}`),
 
