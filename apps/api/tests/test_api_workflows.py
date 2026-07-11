@@ -5,6 +5,7 @@ Covers:
   - POST /validate (valid graph, invalid graph)
   - POST /run (202 response, 422 for invalid graph)
   - 404 for unknown IDs
+  - Authorization: 401 without a session, 404 (not 403) across users (IDOR)
 """
 
 from __future__ import annotations
@@ -37,8 +38,8 @@ INVALID_GRAPH = {
 # ─── Create + Read ────────────────────────────────────────────────────────────
 
 
-async def test_create_workflow(client):
-    resp = await client.post("/api/workflows/", json={
+async def test_create_workflow(auth_client):
+    resp = await auth_client.post("/api/workflows/", json={
         "name": "Test Workflow",
         "description": "A test",
         "graph": VALID_GRAPH,
@@ -50,48 +51,48 @@ async def test_create_workflow(client):
     assert "created_at" in data
 
 
-async def test_list_workflows(client):
+async def test_list_workflows(auth_client):
     # Create one first
-    await client.post("/api/workflows/", json={
+    await auth_client.post("/api/workflows/", json={
         "name": "WF1",
         "graph": VALID_GRAPH,
     })
-    resp = await client.get("/api/workflows/")
+    resp = await auth_client.get("/api/workflows/")
     assert resp.status_code == 200
     items = resp.json()
     assert isinstance(items, list)
     assert len(items) >= 1
 
 
-async def test_get_workflow_by_id(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_get_workflow_by_id(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "GetMe",
         "graph": VALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    resp = await client.get(f"/api/workflows/{wf_id}")
+    resp = await auth_client.get(f"/api/workflows/{wf_id}")
     assert resp.status_code == 200
     assert resp.json()["id"] == wf_id
 
 
-async def test_get_workflow_not_found(client):
+async def test_get_workflow_not_found(auth_client):
     fake_id = "00000000-0000-0000-0000-000000000000"
-    resp = await client.get(f"/api/workflows/{fake_id}")
+    resp = await auth_client.get(f"/api/workflows/{fake_id}")
     assert resp.status_code == 404
 
 
 # ─── Update ───────────────────────────────────────────────────────────────────
 
 
-async def test_update_workflow(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_update_workflow(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "Original",
         "graph": VALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    resp = await client.put(f"/api/workflows/{wf_id}", json={
+    resp = await auth_client.put(f"/api/workflows/{wf_id}", json={
         "name": "Updated",
         "description": "Changed",
         "graph": VALID_GRAPH,
@@ -102,9 +103,9 @@ async def test_update_workflow(client):
     assert data["description"] == "Changed"
 
 
-async def test_update_workflow_not_found(client):
+async def test_update_workflow_not_found(auth_client):
     fake_id = "00000000-0000-0000-0000-000000000000"
-    resp = await client.put(f"/api/workflows/{fake_id}", json={
+    resp = await auth_client.put(f"/api/workflows/{fake_id}", json={
         "name": "X",
         "graph": VALID_GRAPH,
     })
@@ -114,74 +115,74 @@ async def test_update_workflow_not_found(client):
 # ─── Delete ───────────────────────────────────────────────────────────────────
 
 
-async def test_delete_workflow(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_delete_workflow(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "ToDelete",
         "graph": VALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    del_resp = await client.delete(f"/api/workflows/{wf_id}")
+    del_resp = await auth_client.delete(f"/api/workflows/{wf_id}")
     assert del_resp.status_code == 204
 
-    get_resp = await client.get(f"/api/workflows/{wf_id}")
+    get_resp = await auth_client.get(f"/api/workflows/{wf_id}")
     assert get_resp.status_code == 404
 
 
-async def test_delete_workflow_not_found(client):
+async def test_delete_workflow_not_found(auth_client):
     fake_id = "00000000-0000-0000-0000-000000000000"
-    resp = await client.delete(f"/api/workflows/{fake_id}")
+    resp = await auth_client.delete(f"/api/workflows/{fake_id}")
     assert resp.status_code == 404
 
 
 # ─── Validate ─────────────────────────────────────────────────────────────────
 
 
-async def test_validate_valid_graph(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_validate_valid_graph(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "ValidWF",
         "graph": VALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    resp = await client.post(f"/api/workflows/{wf_id}/validate")
+    resp = await auth_client.post(f"/api/workflows/{wf_id}/validate")
     assert resp.status_code == 200
     data = resp.json()
     assert data["valid"] is True
     assert data["errors"] == []
 
 
-async def test_validate_invalid_graph(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_validate_invalid_graph(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "InvalidWF",
         "graph": INVALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    resp = await client.post(f"/api/workflows/{wf_id}/validate")
+    resp = await auth_client.post(f"/api/workflows/{wf_id}/validate")
     assert resp.status_code == 200
     data = resp.json()
     assert data["valid"] is False
     assert len(data["errors"]) > 0
 
 
-async def test_validate_not_found(client):
+async def test_validate_not_found(auth_client):
     fake_id = "00000000-0000-0000-0000-000000000000"
-    resp = await client.post(f"/api/workflows/{fake_id}/validate")
+    resp = await auth_client.post(f"/api/workflows/{fake_id}/validate")
     assert resp.status_code == 404
 
 
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 
-async def test_trigger_run_returns_202(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_trigger_run_returns_202(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "RunMe",
         "graph": VALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    resp = await client.post(f"/api/workflows/{wf_id}/run", json={
+    resp = await auth_client.post(f"/api/workflows/{wf_id}/run", json={
         "trigger_payload": {"hello": "world"},
     })
     assert resp.status_code == 202
@@ -191,22 +192,81 @@ async def test_trigger_run_returns_202(client):
     assert data["status"] in ("pending", "running", "completed")
 
 
-async def test_trigger_run_invalid_graph_returns_422(client):
-    create_resp = await client.post("/api/workflows/", json={
+async def test_trigger_run_invalid_graph_returns_422(auth_client):
+    create_resp = await auth_client.post("/api/workflows/", json={
         "name": "BadGraph",
         "graph": INVALID_GRAPH,
     })
     wf_id = create_resp.json()["id"]
 
-    resp = await client.post(f"/api/workflows/{wf_id}/run", json={
+    resp = await auth_client.post(f"/api/workflows/{wf_id}/run", json={
         "trigger_payload": {},
     })
     assert resp.status_code == 422
 
 
-async def test_trigger_run_not_found(client):
+async def test_trigger_run_not_found(auth_client):
     fake_id = "00000000-0000-0000-0000-000000000000"
-    resp = await client.post(f"/api/workflows/{fake_id}/run", json={
+    resp = await auth_client.post(f"/api/workflows/{fake_id}/run", json={
         "trigger_payload": {},
     })
     assert resp.status_code == 404
+
+
+# ─── Authorization: unauthenticated access ────────────────────────────────────
+
+
+async def test_list_workflows_requires_auth(client):
+    """No session cookie at all → 401, not an empty/global list."""
+    resp = await client.get("/api/workflows/")
+    assert resp.status_code == 401
+
+
+async def test_create_workflow_requires_auth(client):
+    resp = await client.post("/api/workflows/", json={"name": "X", "graph": VALID_GRAPH})
+    assert resp.status_code == 401
+
+
+async def test_get_workflow_requires_auth(client):
+    resp = await client.get("/api/workflows/00000000-0000-0000-0000-000000000000")
+    assert resp.status_code == 401
+
+
+# ─── Authorization: cross-user isolation (IDOR) ───────────────────────────────
+
+
+async def test_workflow_invisible_to_other_user(client):
+    """User A's workflow must 404 (not 403 — avoid confirming it exists) for user B."""
+    # User A creates a workflow.
+    await client.post("/api/auth/register", json={"email": "alice@example.com", "password": "supersecret1"})
+    create_resp = await client.post("/api/workflows/", json={"name": "Alice's WF", "graph": VALID_GRAPH})
+    assert create_resp.status_code == 201
+    wf_id = create_resp.json()["id"]
+
+    # User B logs in (fresh cookie jar behavior: just register, which also sets the cookie).
+    client.cookies.clear()
+    await client.post("/api/auth/register", json={"email": "bob@example.com", "password": "supersecret1"})
+
+    get_resp = await client.get(f"/api/workflows/{wf_id}")
+    assert get_resp.status_code == 404
+
+    list_resp = await client.get("/api/workflows/")
+    assert wf_id not in [w["id"] for w in list_resp.json()]
+
+    update_resp = await client.put(f"/api/workflows/{wf_id}", json={"name": "Hijacked", "graph": VALID_GRAPH})
+    assert update_resp.status_code == 404
+
+    delete_resp = await client.delete(f"/api/workflows/{wf_id}")
+    assert delete_resp.status_code == 404
+
+    run_resp = await client.post(f"/api/workflows/{wf_id}/run", json={"trigger_payload": {}})
+    assert run_resp.status_code == 404
+
+
+async def test_register_seeds_three_example_workflows(client):
+    resp = await client.post(
+        "/api/auth/register", json={"email": "carol@example.com", "password": "supersecret1"}
+    )
+    assert resp.status_code == 201
+    listing = await client.get("/api/workflows/")
+    assert len(listing.json()) == 3
