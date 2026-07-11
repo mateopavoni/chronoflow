@@ -134,8 +134,10 @@ function TransformFields({ config, onChange }: { config: Partial<TransformConfig
         id="transform-mappings"
         value={rawJson}
         onChange={(e) => handleChange(e.target.value)}
-        rows={6}
-        className={INPUT_MONO + ' resize-y'}
+        rows={16}
+        wrap="off"
+        spellCheck={false}
+        className={INPUT_MONO + ' resize-none overflow-auto whitespace-pre'}
         placeholder={'{\n  "outputKey": "$.nodeId.field"\n}'}
       />
       {jsonError && <p className="mt-1 font-mono text-[10px] text-status-error">{jsonError}</p>}
