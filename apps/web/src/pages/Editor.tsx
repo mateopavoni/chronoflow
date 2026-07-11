@@ -13,7 +13,7 @@ import {
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, CheckCircle2, Play, Redo2, Undo2, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, HelpCircle, Play, Redo2, Undo2, XCircle } from 'lucide-react'
 
 import { useRunWorkflow, useUpdateWorkflow, useValidateWorkflow, useWorkflow } from '../hooks/useWorkflows'
 import { NODE_TYPES } from '../components/flow/nodeTypes'
@@ -112,6 +112,9 @@ export function Editor() {
   const [triggerJsonError, setTriggerJsonError] = useState<string | null>(null)
   const [runError, setRunError] = useState<string | null>(null)
   const [nameEdit, setNameEdit] = useState('')
+  const [importError, setImportError] = useState<string | null>(null)
+  const [showImportHelp, setShowImportHelp] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (workflow && !initialized) {
     setNodes(workflow.graph.nodes.map(toFlowNode))
@@ -287,6 +290,44 @@ export function Editor() {
     }
   }
 
+  /** Download the current canvas as a workflow JSON file (same shape the API accepts). */
+  function exportGraph() {
+    const payload = {
+      name: nameEdit,
+      description: workflow?.description,
+      graph: { nodes: nodes.map(fromFlowNode), edges: edges.map(fromFlowEdge) },
+    }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${nameEdit || 'workflow'}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  /** Load a workflow JSON file into the canvas (replaces nodes/edges, snapshot for undo). */
+  async function importGraph(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    try {
+      const parsed = JSON.parse(await file.text()) as { name?: unknown; graph?: { nodes?: unknown; edges?: unknown } }
+      if (!Array.isArray(parsed.graph?.nodes) || !Array.isArray(parsed.graph.edges)) {
+        throw new Error('File is missing graph.nodes / graph.edges')
+      }
+      const importedNodes = parsed.graph.nodes as GraphNode[]
+      const importedEdges = parsed.graph.edges as GraphEdge[]
+      takeSnapshot()
+      setNodes(importedNodes.map(toFlowNode))
+      setEdges(importedEdges.map(toFlowEdge))
+      if (typeof parsed.name === 'string') setNameEdit(parsed.name)
+      setSelectedNodeId(null)
+      setImportError(null)
+    } catch (err) {
+      setImportError(err instanceof Error ? err.message : 'Invalid workflow JSON')
+    }
+  }
+
   async function handleValidate() {
     try {
       const result = await validateMutation.mutateAsync(id)
@@ -383,6 +424,23 @@ export function Editor() {
             </span>
           )}
           {updateMutation.isSuccess && <span className="font-mono text-[10px] text-status-success">Saved</span>}
+          {importError && <span className="font-mono text-[10px] text-status-error">Import failed: {importError}</span>}
+
+          <input ref={fileInputRef} type="file" accept="application/json" onChange={(e) => void importGraph(e)} className="hidden" />
+          <button onClick={() => fileInputRef.current?.click()} className={BTN_SECONDARY}>
+            Import
+          </button>
+          <button onClick={exportGraph} className={BTN_SECONDARY}>
+            Export
+          </button>
+          <button
+            onClick={() => setShowImportHelp(true)}
+            className={BTN_ICON}
+            title="Import/export JSON format"
+            aria-label="Import/export JSON format help"
+          >
+            <HelpCircle size={14} />
+          </button>
 
           <button
             onClick={undo}
@@ -455,6 +513,7 @@ export function Editor() {
 
         {selectedNode && workflow && (
           <NodeConfigDrawer
+            key={selectedNode.id}
             node={{
               id: selectedNode.id,
               type: selectedNode.type as NodeType,
@@ -466,6 +525,50 @@ export function Editor() {
           />
         )}
       </div>
+
+      {/* Import/export format help */}
+      <Modal open={showImportHelp} onClose={() => setShowImportHelp(false)} title="Import / export format" size="lg">
+        <div className="flex flex-col gap-3">
+          <p className="font-mono text-body-sm text-on-surface">
+            Export downloads the current canvas as JSON; Import loads a JSON file with this same shape (it's what
+            the API accepts as a workflow):
+          </p>
+          <pre className="overflow-auto whitespace-pre border border-outline-variant bg-surface-container-lowest p-3 font-mono text-[11px] text-on-surface">
+            {`{
+  "name": "My workflow",
+  "description": "optional",
+  "graph": {
+    "nodes": [
+      {
+        "id": "unique-node-id",
+        "type": "start | transform | http | delay | branch | end",
+        "position": { "x": 0, "y": 0 },
+        "data": { "label": "...", "config": { /* per-type, see below */ } }
+      }
+    ],
+    "edges": [
+      { "id": "unique-edge-id", "source": "nodeId", "target": "nodeId" }
+    ]
+  }
+}`}
+          </pre>
+          <ul className="list-inside list-disc font-mono text-[11px] text-on-surface-variant">
+            <li>Node ids must be unique and are what JSONPath expressions reference (e.g. "$.nodeId.field").</li>
+            <li>transform config: {'{ "mappings": { "outKey": "$.nodeId.field" } }'}</li>
+            <li>http config: {'{ "method": "GET", "url": "..." }'} (response lands under "$.nodeId.body")</li>
+            <li>delay config: {'{ "seconds": 1 }'}</li>
+            <li>branch config: {'{ "condition": "$.nodeId.value > 10" }'}, and its outgoing edges need {'data: { "branch": "true" | "false" }'}</li>
+          </ul>
+          <div className="flex gap-4 pt-1">
+            <a href="/examples/minimal-workflow.json" download className="font-mono text-label-xs uppercase tracking-wide text-primary underline">
+              Download minimal example
+            </a>
+            <a href="/examples/example-workflow.json" download className="font-mono text-label-xs uppercase tracking-wide text-primary underline">
+              Download full example
+            </a>
+          </div>
+        </div>
+      </Modal>
 
       {/* Validation modal */}
       {validationResult && (
