@@ -1,7 +1,10 @@
-"""Seed script — creates example workflows on startup.
+"""Seed script — creates example workflows for a new user.
 
-Idempotent: checks if any workflows exist before inserting.
-Three examples:
+Called once per user right after registration (see app/api/routes/auth.py),
+not once globally at startup: workflows are owned per-user (see
+app/models/workflow.py `owner_id`), so a shared global seed would either be
+unowned or visible to every account. Each new account gets its own copy of
+the 3 examples to explore:
   1. "Parallel Delays Demo" — two delay branches in parallel (proves the ready-set
      scheduler: total time ≈ max(3s, 1s) = 3s, not 3+1=4s).
   2. "Branch + Transform + HTTP" — branch on trigger value, transform, real HTTP call.
@@ -10,7 +13,8 @@ Three examples:
 
 from __future__ import annotations
 
-from sqlalchemy import func, select
+import uuid
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.workflow import Workflow
@@ -203,15 +207,15 @@ SEED_WORKFLOWS = [
 ]
 
 
-async def seed_workflows(session: AsyncSession) -> None:
-    """Insert example workflows if the table is empty (idempotent)."""
-    count_result = await session.execute(select(func.count()).select_from(Workflow))
-    count = count_result.scalar_one()
-    if count > 0:
-        return  # already seeded
+async def seed_workflows_for_user(session: AsyncSession, owner_id: uuid.UUID) -> None:
+    """Insert the 3 example workflows owned by a freshly registered user.
 
+    Not idempotent by design — it's only ever called once, right after a user
+    row is created, so there's nothing to guard against re-seeding.
+    """
     for data in SEED_WORKFLOWS:
         wf = Workflow(
+            owner_id=owner_id,
             name=data["name"],
             description=data["description"],
             graph=data["graph"],

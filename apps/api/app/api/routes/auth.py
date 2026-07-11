@@ -22,6 +22,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.session import get_session
 from app.models.user import User
 from app.schemas.auth import LoginIn, RegisterIn, UserOut
+from app.services.seed import seed_workflows_for_user
 
 router = APIRouter()
 
@@ -77,6 +78,10 @@ async def register(
         await session.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
     await session.refresh(user)
+    # Give every new account its own copy of the 3 example workflows to explore.
+    # Workflows are owned per-user (see app/models/workflow.py) so this can't be
+    # a shared global seed anymore — see app/services/seed.py.
+    await seed_workflows_for_user(session, user.id)
     _set_session_cookie(response, user)
     return user
 
