@@ -310,6 +310,16 @@ Modelos ORM en `app/models/`, **separados** de los schemas Pydantic en `app/sche
 > **Caveat de producción honesto:** el task manager es in-process (para la demo). En producción
 > se reemplazaría por una cola durable (Arq/Celery + Redis). Está documentado, no escondido.
 
+**Superficie pública — SSRF y abuso de cómputo:** el nodo `http` deja que cualquier usuario logueado
+haga que el servidor emita una request a una URL arbitraria (necesario para el caso de uso del nodo).
+`executors._assert_public_url` resuelve el host y bloquea IPs privadas/loopback/link-local/reservadas
+(incluye el endpoint de metadata de cloud `169.254.169.254`) antes de dejar pasar la request — cierra el
+SSRF más obvio hacia la red interna del VPS. No cierra DNS-rebinding (la IP podría cambiar entre el check
+y el connect real de httpx); aceptable para el modelo de amenaza de una demo de portfolio. Además, como
+`/run` ejecuta en el mismo proceso sin cola (ver arriba), se sumó un rate limit por usuario (20/min,
+`app/core/rate_limit.py`) para que una cuenta no pueda pegarle a la CPU spammeando runs; `register`
+también quedó limitado (5/min/IP) — antes solo `login` lo estaba.
+
 ---
 
 ## 8. Cómo se comunica todo (flujo end-to-end)
