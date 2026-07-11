@@ -20,7 +20,7 @@ import { NODE_TYPES } from '../components/flow/nodeTypes'
 import { NodePalette } from '../components/flow/NodePalette'
 import { NodeConfigDrawer } from '../components/flow/NodeConfigDrawer'
 import { Modal } from '../components/ui/Modal'
-import { LoadingSpinner } from '../components/ui/LoadingSpinner'
+import { CanvasSkeleton } from '../components/ui/CanvasSkeleton'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { generateId, tryParseJson } from '../lib/utils'
@@ -347,7 +347,7 @@ export function Editor() {
   const selectedNode = nodes.find((n) => n.id === selectedNodeId)
   const dotColor = theme === 'dark' ? '#33343c' : '#d4d4d8'
 
-  if (isLoading) return <LoadingSpinner label="Loading workflow..." />
+  if (isLoading) return <CanvasSkeleton variant="editor" />
   if (isError) {
     return (
       <div className="p-container-margin">
