@@ -20,6 +20,7 @@ Database strategy:
 
 from __future__ import annotations
 
+import uuid
 from collections.abc import AsyncGenerator
 
 import pytest_asyncio
@@ -104,3 +105,37 @@ async def client(engine, session_factory) -> AsyncGenerator[AsyncClient, None]:
     db_engine_module.AsyncSessionLocal = original_factory
     wf_routes.AsyncSessionLocal = original_factory
     runs_routes.AsyncSessionLocal = original_factory
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_user_id(db_session: AsyncSession):
+    """A persisted User row's id.
+
+    test_engine.py builds `Workflow` rows directly against the DB (not through
+    the API), so it needs a real owner_id to satisfy the NOT NULL/FK now that
+    workflows are owned per-user — see app/models/workflow.py.
+    """
+    from app.core.security import hash_password
+    from app.models.user import User
+
+    user = User(email=f"{uuid.uuid4().hex}@example.com", password_hash=hash_password("irrelevant"))
+    db_session.add(user)
+    await db_session.flush()
+    return user.id
+
+
+@pytest_asyncio.fixture(scope="function")
+async def auth_client(client: AsyncClient) -> AsyncClient:
+    """The same `client`, but registered as a fresh user (session cookie set).
+
+    Workflows/runs routes require auth + ownership (see app/api/deps.py
+    get_current_user) — most CRUD tests want a logged-in caller and don't
+    care which one, so register a throwaway user once and reuse the client
+    (httpx's AsyncClient persists cookies across requests automatically).
+    """
+    email = f"{uuid.uuid4().hex}@example.com"
+    resp = await client.post(
+        "/api/auth/register", json={"email": email, "password": "supersecret1"}
+    )
+    assert resp.status_code == 201, resp.text
+    return client
