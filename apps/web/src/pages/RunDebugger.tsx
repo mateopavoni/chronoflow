@@ -10,7 +10,7 @@ import { useRunStream } from '../hooks/useRunStream'
 import { computeReplayState } from '../lib/replayState'
 import { PayloadInspector } from '../components/ui/PayloadInspector'
 import { StatusBadge } from '../components/ui/StatusBadge'
-import { LoadingSpinner } from '../components/ui/LoadingSpinner'
+import { CanvasSkeleton } from '../components/ui/CanvasSkeleton'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { formatDateTime, formatDuration, cx } from '../lib/utils'
@@ -111,7 +111,7 @@ export function RunDebugger() {
     }
   }
 
-  if (runLoading || wfLoading) return <LoadingSpinner label="Loading run..." />
+  if (runLoading || wfLoading) return <CanvasSkeleton variant="debugger" />
   if (runError) {
     return (
       <div className="p-container-margin">

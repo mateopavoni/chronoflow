@@ -10,6 +10,12 @@ Routes:
   DELETE /{id}           → delete workflow (204)
   POST   /{id}/validate  → validate DAG (ValidationResult)
   POST   /{id}/run       → trigger a run (202, RunOut)
+
+Authorization: every route requires a logged-in user (`get_current_user`) and
+every single-resource route scopes its query to `owner_id == user.id` — a
+workflow that exists but belongs to someone else returns 404, same as one
+that doesn't exist at all, so a caller can't distinguish "not yours" from
+"doesn't exist" (avoids confirming other users' workflow IDs).
 """
 
 from __future__ import annotations
@@ -21,10 +27,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.db.engine import AsyncSessionLocal
 from app.db.session import get_session
 from app.engine.validator import validate_graph
 from app.models.run import WorkflowRun
+from app.models.user import User
 from app.models.workflow import Workflow
 from app.schemas.graph import Graph
 from app.schemas.run import RunOut, TriggerPayloadIn
@@ -38,12 +46,30 @@ def _utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+async def _get_owned_workflow(
+    session: AsyncSession, workflow_id: uuid.UUID, user: User
+) -> Workflow:
+    """Load a workflow, 404 if missing OR not owned by `user` (see module docstring)."""
+    wf = await session.get(Workflow, workflow_id)
+    if wf is None or wf.owner_id != user.id:
+        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    return wf
+
+
 # ─── List ─────────────────────────────────────────────────────────────────────
 
 
 @router.get("/", response_model=list[WorkflowOut])
-async def list_workflows(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Workflow).order_by(Workflow.created_at.desc()))
+async def list_workflows(
+    session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
+):
+    stmt = (
+        select(Workflow)
+        .where(Workflow.owner_id == user.id)
+        .order_by(Workflow.created_at.desc())
+    )
+    result = await session.execute(stmt)
     return result.scalars().all()
 
 
@@ -54,9 +80,11 @@ async def list_workflows(session: AsyncSession = Depends(get_session)):
 async def create_workflow(
     body: WorkflowIn,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
     now = _utcnow()
     wf = Workflow(
+        owner_id=user.id,
         name=body.name,
         description=body.description,
         graph=body.graph.model_dump(),
@@ -76,11 +104,9 @@ async def create_workflow(
 async def get_workflow(
     workflow_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
-    wf = await session.get(Workflow, workflow_id)
-    if wf is None:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
-    return wf
+    return await _get_owned_workflow(session, workflow_id, user)
 
 
 # ─── Update ───────────────────────────────────────────────────────────────────
@@ -91,10 +117,9 @@ async def update_workflow(
     workflow_id: uuid.UUID,
     body: WorkflowIn,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
-    wf = await session.get(Workflow, workflow_id)
-    if wf is None:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    wf = await _get_owned_workflow(session, workflow_id, user)
 
     wf.name = body.name
     wf.description = body.description
@@ -112,10 +137,9 @@ async def update_workflow(
 async def delete_workflow(
     workflow_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
-    wf = await session.get(Workflow, workflow_id)
-    if wf is None:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    wf = await _get_owned_workflow(session, workflow_id, user)
     await session.delete(wf)
     await session.commit()
 
@@ -127,15 +151,14 @@ async def delete_workflow(
 async def validate_workflow(
     workflow_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
     """Validate the DAG structure and return errors/warnings.
 
     Returns 200 regardless of whether the graph is valid — the `valid` field
     in the response tells the caller. 422 is reserved for Pydantic body errors.
     """
-    wf = await session.get(Workflow, workflow_id)
-    if wf is None:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    wf = await _get_owned_workflow(session, workflow_id, user)
 
     graph = Graph.model_validate(wf.graph)
     return validate_graph(graph)
@@ -149,15 +172,14 @@ async def trigger_run(
     workflow_id: uuid.UUID,
     body: TriggerPayloadIn,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
     """Trigger a new workflow run. Returns immediately (202) with the run_id.
 
     The run executes in the background. Poll GET /runs/{id} or subscribe to
     WS /api/ws/runs/{id} for live progress.
     """
-    wf = await session.get(Workflow, workflow_id)
-    if wf is None:
-        raise HTTPException(status_code=404, detail=f"Workflow {workflow_id} not found")
+    wf = await _get_owned_workflow(session, workflow_id, user)
 
     # Validate the graph before running
     graph = Graph.model_validate(wf.graph)

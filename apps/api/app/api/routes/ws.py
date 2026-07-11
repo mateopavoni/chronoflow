@@ -3,14 +3,20 @@
 Route: /api/ws/runs/{run_id}
 
 Protocol:
-  1. Client connects.
-  2. Server sends all already-persisted events (catch-up, in case the client
+  1. Client connects (browser sends the httpOnly session cookie automatically —
+     same-origin WS handshake, no JS involvement).
+  2. Server decodes the session cookie; closes 4401 if missing/invalid.
+  3. Server verifies the run exists AND its workflow is owned by that user;
+     closes 4004 otherwise (same code/message as "not found" — a run that
+     belongs to someone else must be indistinguishable from one that doesn't
+     exist, same rule as the REST routes in workflows.py/runs.py).
+  4. Server sends all already-persisted events (catch-up, in case the client
      connected after some events were already emitted).
-  3. Server subscribes to the in-process pub/sub channel for this run.
-  4. Server sends new events as they arrive (live streaming).
-  5. When the run finishes (completed/failed) the server sends a final
+  5. Server subscribes to the in-process pub/sub channel for this run.
+  6. Server sends new events as they arrive (live streaming).
+  7. When the run finishes (completed/failed) the server sends a final
      {"type": "run_finished", "status": "..."} message and closes.
-  6. On disconnect the subscription is cleaned up.
+  8. On disconnect the subscription is cleaned up.
 
 Message format: JSON-serialized ExecutionEventOut (matching the REST contract).
 """
@@ -19,11 +25,13 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
+from app.core.security import decode_access_token
 from app.db.engine import AsyncSessionLocal
 from app.models.run import ExecutionEvent, WorkflowRun
+from app.models.workflow import Workflow
 from app.schemas.run import ExecutionEventOut
 from app.services.task_manager import subscribe, unsubscribe
 
@@ -31,16 +39,33 @@ router = APIRouter()
 
 
 @router.websocket("/runs/{run_id}")
-async def ws_run_events(websocket: WebSocket, run_id: uuid.UUID):
+async def ws_run_events(
+    websocket: WebSocket,
+    run_id: uuid.UUID,
+    chronoflow_session: str | None = Cookie(default=None, alias="chronoflow_session"),
+):
     """Stream ExecutionEvents for a run in real time."""
     await websocket.accept()
 
     run_id_str = str(run_id)
 
+    # ── Step 0: authenticate from the session cookie ────────────────────
+    user_id = decode_access_token(chronoflow_session) if chronoflow_session else None
+    if user_id is None:
+        await websocket.send_json({"error": "Not authenticated"})
+        await websocket.close(code=4401)
+        return
+
     # ── Step 1: catch-up — send all already-persisted events ────────────
     async with AsyncSessionLocal() as session:
-        # Verify run exists
-        run = await session.get(WorkflowRun, run_id)
+        # Verify the run exists AND its workflow is owned by this user.
+        stmt = (
+            select(WorkflowRun)
+            .join(Workflow, WorkflowRun.workflow_id == Workflow.id)
+            .where(WorkflowRun.id == run_id, Workflow.owner_id == user_id)
+        )
+        result = await session.execute(stmt)
+        run = result.scalar_one_or_none()
         if run is None:
             await websocket.send_json({"error": f"Run {run_id} not found"})
             await websocket.close(code=4004)

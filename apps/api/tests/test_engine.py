@@ -81,9 +81,9 @@ def _branch_graph() -> dict:
 # ─── Test: simple pipeline ───────────────────────────────────────────────────
 
 
-async def test_simple_pipeline_produces_correct_output(db_session, session_factory):
+async def test_simple_pipeline_produces_correct_output(db_session, session_factory, test_user_id):
     """start → transform → end: transform maps trigger.val correctly."""
-    wf = Workflow(name="test", graph=_simple_graph())
+    wf = Workflow(owner_id=test_user_id, name="test", graph=_simple_graph())
     db_session.add(wf)
     await db_session.flush()
 
@@ -111,7 +111,7 @@ async def test_simple_pipeline_produces_correct_output(db_session, session_facto
 # ─── Test: parallelism ───────────────────────────────────────────────────────
 
 
-async def test_parallel_delays_finish_in_max_not_sum(db_session, session_factory):
+async def test_parallel_delays_finish_in_max_not_sum(db_session, session_factory, test_user_id):
     """Two parallel delays (0.15s + 0.05s) should finish in ~0.15s, not 0.20s.
 
     We use a 40% margin: total time must be < 0.15 + (0.15 * 0.40) = 0.21s.
@@ -120,7 +120,7 @@ async def test_parallel_delays_finish_in_max_not_sum(db_session, session_factory
     delay_long = 0.15
     delay_short = 0.05
 
-    wf = Workflow(name="parallel-test", graph=_parallel_delays_graph(delay_long, delay_short))
+    wf = Workflow(owner_id=test_user_id, name="parallel-test", graph=_parallel_delays_graph(delay_long, delay_short))
     db_session.add(wf)
     await db_session.flush()
 
@@ -158,9 +158,9 @@ async def test_parallel_delays_finish_in_max_not_sum(db_session, session_factory
 # ─── Test: branch pruning ────────────────────────────────────────────────────
 
 
-async def test_branch_true_arm_taken_false_arm_skipped(db_session, session_factory):
+async def test_branch_true_arm_taken_false_arm_skipped(db_session, session_factory, test_user_id):
     """When branch condition is True, tr-true runs and tr-false is skipped."""
-    wf = Workflow(name="branch-test", graph=_branch_graph())
+    wf = Workflow(owner_id=test_user_id, name="branch-test", graph=_branch_graph())
     db_session.add(wf)
     await db_session.flush()
 
@@ -200,9 +200,9 @@ async def test_branch_true_arm_taken_false_arm_skipped(db_session, session_facto
     assert "completed" not in tr_false_statuses
 
 
-async def test_branch_false_arm_taken(db_session, session_factory):
+async def test_branch_false_arm_taken(db_session, session_factory, test_user_id):
     """When branch condition is False, tr-false runs and tr-true is skipped."""
-    wf = Workflow(name="branch-test-false", graph=_branch_graph())
+    wf = Workflow(owner_id=test_user_id, name="branch-test-false", graph=_branch_graph())
     db_session.add(wf)
     await db_session.flush()
 
@@ -232,13 +232,13 @@ async def test_branch_false_arm_taken(db_session, session_factory):
 # ─── Test: time-travel sequence ordering ─────────────────────────────────────
 
 
-async def test_execution_events_have_monotonic_sequence(db_session, session_factory):
+async def test_execution_events_have_monotonic_sequence(db_session, session_factory, test_user_id):
     """All ExecutionEvents for a run must have strictly increasing sequence numbers.
 
     This guarantees the time-travel scrubber can replay state correctly
     by iterating events in sequence order.
     """
-    wf = Workflow(name="seq-test", graph=_parallel_delays_graph(0.05, 0.02))
+    wf = Workflow(owner_id=test_user_id, name="seq-test", graph=_parallel_delays_graph(0.05, 0.02))
     db_session.add(wf)
     await db_session.flush()
 
@@ -268,9 +268,9 @@ async def test_execution_events_have_monotonic_sequence(db_session, session_fact
         )
 
 
-async def test_events_have_running_and_completed_statuses(db_session, session_factory):
+async def test_events_have_running_and_completed_statuses(db_session, session_factory, test_user_id):
     """Each non-branch node should have at least a 'running' and 'completed' event."""
-    wf = Workflow(name="status-test", graph=_simple_graph())
+    wf = Workflow(owner_id=test_user_id, name="status-test", graph=_simple_graph())
     db_session.add(wf)
     await db_session.flush()
 
@@ -297,9 +297,9 @@ async def test_events_have_running_and_completed_statuses(db_session, session_fa
         assert "completed" in statuses, f"Node '{node_id}' missing 'completed' event"
 
 
-async def test_completed_events_have_duration_ms(db_session, session_factory):
+async def test_completed_events_have_duration_ms(db_session, session_factory, test_user_id):
     """Completed events should have a non-null duration_ms."""
-    wf = Workflow(name="duration-test", graph=_simple_graph())
+    wf = Workflow(owner_id=test_user_id, name="duration-test", graph=_simple_graph())
     db_session.add(wf)
     await db_session.flush()
 

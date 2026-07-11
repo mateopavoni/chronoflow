@@ -7,26 +7,49 @@ Routes:
   GET  /{id}                → get single run
   GET  /{id}/events         → time-travel log (ordered by sequence)
   POST /{id}/replay         → create a new run with same workflow + trigger (202)
+
+Authorization: a Run has no owner of its own — it belongs to a Workflow, which
+does. Every route requires a logged-in user and checks ownership via a join to
+`workflows.owner_id`, so a run (and its ExecutionEvents / time-travel
+snapshots) triggered on someone else's workflow is invisible — 404, same as a
+nonexistent id (see workflows.py module docstring for why 404 not 403).
 """
 
 from __future__ import annotations
 
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.db.engine import AsyncSessionLocal
 from app.db.session import get_session
 from app.engine.validator import validate_graph
 from app.models.run import ExecutionEvent, WorkflowRun
+from app.models.user import User
+from app.models.workflow import Workflow
 from app.schemas.graph import Graph
 from app.schemas.run import ExecutionEventOut, RunOut
 from app.services.task_manager import launch_run
 
 router = APIRouter()
+
+
+async def _get_owned_run(session: AsyncSession, run_id: uuid.UUID, user: User) -> WorkflowRun:
+    """Load a run, 404 if missing OR its workflow isn't owned by `user`."""
+    stmt = (
+        select(WorkflowRun)
+        .join(Workflow, WorkflowRun.workflow_id == Workflow.id)
+        .where(WorkflowRun.id == run_id, Workflow.owner_id == user.id)
+    )
+    result = await session.execute(stmt)
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    return run
 
 
 # ─── List runs ────────────────────────────────────────────────────────────────
@@ -36,9 +59,15 @@ router = APIRouter()
 async def list_runs(
     workflow_id: uuid.UUID | None = Query(default=None),
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
-    """List runs, optionally filtered by workflow_id."""
-    stmt = select(WorkflowRun).order_by(WorkflowRun.started_at.desc())
+    """List runs owned by the current user, optionally filtered by workflow_id."""
+    stmt = (
+        select(WorkflowRun)
+        .join(Workflow, WorkflowRun.workflow_id == Workflow.id)
+        .where(Workflow.owner_id == user.id)
+        .order_by(WorkflowRun.started_at.desc())
+    )
     if workflow_id is not None:
         stmt = stmt.where(WorkflowRun.workflow_id == workflow_id)
     result = await session.execute(stmt)
@@ -52,11 +81,9 @@ async def list_runs(
 async def get_run(
     run_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
-    run = await session.get(WorkflowRun, run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
-    return run
+    return await _get_owned_run(session, run_id, user)
 
 
 # ─── Get execution events (time-travel log) ───────────────────────────────────
@@ -66,16 +93,15 @@ async def get_run(
 async def get_run_events(
     run_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
     """Return all ExecutionEvents for a run, ordered by sequence.
 
     This is the dataset the frontend uses for time-travel debugging:
     apply events 0..k to reconstruct the DAG state at time k.
     """
-    # Verify the run exists first
-    run = await session.get(WorkflowRun, run_id)
-    if run is None:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    # Verify the run exists AND is owned by the current user first
+    await _get_owned_run(session, run_id, user)
 
     stmt = (
         select(ExecutionEvent)
@@ -93,6 +119,7 @@ async def get_run_events(
 async def replay_run(
     run_id: uuid.UUID,
     session: AsyncSession = Depends(get_session),
+    user: User = Depends(get_current_user),
 ):
     """Create a new run with the same workflow and trigger_payload.
 
@@ -100,13 +127,10 @@ async def replay_run(
     Note: deterministic for transform/delay/branch; http nodes may return
     different results (documented trade-off, see ARCHITECTURE.md §7).
     """
-    original = await session.get(WorkflowRun, run_id)
-    if original is None:
-        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+    original = await _get_owned_run(session, run_id, user)
 
     # Load the workflow to validate it still exists and is valid
-    from app.models.workflow import Workflow
-
+    # (ownership already confirmed by _get_owned_run's join).
     wf = await session.get(Workflow, original.workflow_id)
     if wf is None:
         raise HTTPException(
@@ -122,8 +146,6 @@ async def replay_run(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail={"message": "Graph validation failed", "errors": validation.errors},
         )
-
-    from datetime import datetime
 
     now = datetime.now(UTC)
     new_run = WorkflowRun(

@@ -28,21 +28,16 @@ logger = logging.getLogger("chronoflow")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """FastAPI lifespan: runs before first request and on shutdown."""
-    from app.db.engine import AsyncSessionLocal
-    from app.services.seed import seed_workflows
+    """FastAPI lifespan: runs before first request and on shutdown.
 
-    logger.info("Seeding example workflows...")
-    try:
-        async with AsyncSessionLocal() as session:
-            await seed_workflows(session)
-        logger.info("Startup complete.")
-    except Exception as exc:
-        # Don't crash startup if DB isn't ready yet (e.g., first boot without migrations)
-        logger.warning("Seed skipped (DB may not be ready): %s", exc)
-
+    Note: example workflows used to be seeded here, globally, once. That no
+    longer fits the ownership model (workflows are per-user, see
+    app/models/workflow.py `owner_id`) — each new account now gets its own
+    copy of the 3 examples on POST /api/auth/register instead (see
+    app/services/seed.py + app/api/routes/auth.py).
+    """
+    logger.info("Startup complete.")
     yield  # Application runs here
-
     logger.info("Shutting down ChronoFlow API.")
 
 
