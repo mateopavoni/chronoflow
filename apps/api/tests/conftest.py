@@ -79,6 +79,15 @@ async def client(engine, session_factory) -> AsyncGenerator[AsyncClient, None]:
     Overrides get_session dependency so all route handlers use the in-memory DB.
     """
 
+    # Rate limiters (auth.py, workflows.py) are process-global singletons —
+    # reset between tests so one test's hits don't 429 the next one.
+    import app.api.routes.auth as auth_routes
+    import app.api.routes.workflows as wf_routes_for_limiter
+
+    auth_routes._login_limiter._hits.clear()
+    auth_routes._register_limiter._hits.clear()
+    wf_routes_for_limiter._run_limiter._hits.clear()
+
     async def override_get_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as session:
             yield session
