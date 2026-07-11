@@ -19,7 +19,10 @@ Node types and their contracts (from ARCHITECTURE.md §2):
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import socket
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -32,6 +35,48 @@ from app.engine.jsonpath_resolver import (
 from app.schemas.graph import GraphNode
 
 # ─── Executor registry ──────────────────────────────────────────────────────
+
+
+def _assert_public_url(url: str) -> None:
+    """SSRF guard for the `http` node: block requests to non-public addresses.
+
+    Any authenticated user can point a workflow's `http` node at an arbitrary
+    URL, and that request is made *from the server*. Without this check, a
+    workflow could reach the Dokku host's internal-only services, the cloud
+    metadata endpoint (169.254.169.254), or localhost — a classic SSRF pivot.
+
+    Resolves the hostname and checks every returned address (not just the
+    hostname string) since "localhost", decimal/octal IP encodings, or a
+    domain that resolves to a private range would all bypass a naive
+    string check. Does not fully close DNS-rebinding (the resolved IP could
+    change between this check and httpx's own connect) — acceptable for a
+    portfolio demo's threat model; revisit with a pinned-resolver transport
+    if this ever handles real user data.
+    """
+    parts = urlsplit(url)
+    if parts.scheme not in ("http", "https"):
+        raise ValueError(f"http node: unsupported URL scheme '{parts.scheme}'")
+    if not parts.hostname:
+        raise ValueError("http node: URL has no hostname")
+
+    try:
+        addrinfo = socket.getaddrinfo(parts.hostname, None)
+    except socket.gaierror as exc:
+        raise ValueError(f"http node: could not resolve host '{parts.hostname}'") from exc
+
+    for family, _, _, _, sockaddr in addrinfo:
+        ip = ipaddress.ip_address(sockaddr[0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValueError(
+                f"http node: URL resolves to a non-public address ({ip}) — blocked"
+            )
 
 async def execute_node(node: GraphNode, context: dict[str, Any]) -> dict[str, Any]:
     """Dispatch to the correct executor based on node.type."""
@@ -100,6 +145,7 @@ async def _execute_http(node: GraphNode, context: dict[str, Any]) -> dict[str, A
 
     # Resolve template placeholders in URL
     url = resolve_template(raw_url, context)
+    _assert_public_url(url)
 
     # Resolve JSONPath values inside the body dict
     body: dict[str, Any] = {
