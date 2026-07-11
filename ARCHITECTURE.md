@@ -158,6 +158,13 @@ La respuesta de `POST .../run` es inmediata (`202` + `run_id`); el progreso lleg
 
 ## 4. Contrato de API REST  (prefijo `/api`)
 
+> **Todas las rutas de `/api/workflows` y `/api/runs` (+ el WS) requieren sesión** (cookie
+> httpOnly, ver §6). Un `Workflow` tiene `owner_id`; un `Run` hereda el owner del `Workflow` al
+> que pertenece. Toda ruta de un solo recurso (`GET/PUT/DELETE /workflows/{id}`, `GET
+> /runs/{id}`, `.../events`, `.../replay`, el WS) devuelve **404** (nunca 403) si el recurso
+> existe pero no es del usuario autenticado — mismo código que "no existe", para no confirmarle
+> a un caller que un UUID ajeno es válido (IDOR). Sin cookie válida → `401`.
+
 ### Workflows
 | Método | Ruta | Body | Respuesta |
 |--------|------|------|-----------|
@@ -184,7 +191,8 @@ La respuesta de `POST .../run` es inmediata (`202` + `run_id`); el progreso lleg
 
 > **Frames del WS:** además de los `ExecutionEventOut`, el server emite frames de **control** por el
 > mismo socket: `{ "type": "run_finished", "status": RunStatus }` al terminar y `{ "error": string }`
-> si el run no existe (seguido de cierre con código `4004`). El cliente los distingue por forma y
+> si el run no existe **o no pertenece al usuario** (seguido de cierre `4004`), o si falta/es
+> inválida la cookie de sesión (cierre `4401`). El cliente los distingue por forma y
 > **no** los almacena como eventos. Cierres `4xxx` son de aplicación (intencionales) → el cliente no
 > reconecta; sólo reintenta ante caídas transitorias (p.ej. `1006`).
 
@@ -222,8 +230,15 @@ interface ValidationResult { valid: boolean; errors: string[]; warnings: string[
 ## 5. Esquema de base de datos (SQLAlchemy 2.x async + Alembic)
 
 ```
+users
+  id             UUID  PK
+  email          TEXT  NOT NULL UNIQUE
+  password_hash  TEXT  NOT NULL        -- bcrypt
+  created_at     TIMESTAMPTZ
+
 workflows
   id           UUID  PK
+  owner_id     UUID  FK -> users(id) ON DELETE CASCADE, NOT NULL, INDEX
   name         TEXT  NOT NULL
   description  TEXT
   graph        JSONB NOT NULL        -- { nodes, edges }
@@ -257,6 +272,11 @@ execution_events                          -- append-only (time-travel)
 ```
 
 Modelos ORM en `app/models/`, **separados** de los schemas Pydantic en `app/schemas/`.
+
+> **Seed por usuario, no global.** Los 3 workflows de ejemplo se insertan una vez por cuenta,
+> justo después de `POST /api/auth/register` (`app/services/seed.py` ·
+> `seed_workflows_for_user`), no una sola vez al bootear el proceso — un seed global no tiene
+> sentido con `owner_id NOT NULL`. Cada usuario nuevo arranca con su propia copia para explorar.
 
 ---
 
