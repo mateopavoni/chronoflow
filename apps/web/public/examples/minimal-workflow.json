@@ -1,0 +1,33 @@
+{
+  "name": "Example: minimal pipeline",
+  "description": "Smallest valid workflow — no network calls, good for a first import test.",
+  "graph": {
+    "nodes": [
+      {
+        "id": "start-1",
+        "type": "start",
+        "position": { "x": 80, "y": 160 },
+        "data": { "label": "Start", "config": {} }
+      },
+      {
+        "id": "transform-1",
+        "type": "transform",
+        "position": { "x": 320, "y": 160 },
+        "data": {
+          "label": "Echo trigger",
+          "config": { "mappings": { "receivedAt": "$.trigger.timestamp" } }
+        }
+      },
+      {
+        "id": "end-1",
+        "type": "end",
+        "position": { "x": 560, "y": 160 },
+        "data": { "label": "End", "config": {} }
+      }
+    ],
+    "edges": [
+      { "id": "edge-1", "source": "start-1", "target": "transform-1" },
+      { "id": "edge-2", "source": "transform-1", "target": "end-1" }
+    ]
+  }
+}
