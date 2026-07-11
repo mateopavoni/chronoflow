@@ -63,14 +63,29 @@ async def test_login_then_logout_clears_session(client):
 
 @pytest.mark.asyncio
 async def test_login_rate_limited(client):
-    auth_route._login_hits.clear()
+    auth_route._login_limiter._hits.clear()
     await client.post("/api/auth/register", json=CREDS)
     client.cookies.clear()
 
     last = None
-    for _ in range(auth_route._LOGIN_MAX_ATTEMPTS + 2):
+    for _ in range(auth_route._login_limiter.max_attempts + 2):
         last = await client.post(
             "/api/auth/login", json={"email": CREDS["email"], "password": "wrong"}
         )
     assert last is not None and last.status_code == 429
-    auth_route._login_hits.clear()
+    auth_route._login_limiter._hits.clear()
+
+
+@pytest.mark.asyncio
+async def test_register_rate_limited(client):
+    auth_route._register_limiter._hits.clear()
+
+    last = None
+    for i in range(auth_route._register_limiter.max_attempts + 2):
+        last = await client.post(
+            "/api/auth/register",
+            json={"email": f"flood{i}@example.com", "password": "supersecret1"},
+        )
+        client.cookies.clear()
+    assert last is not None and last.status_code == 429
+    auth_route._register_limiter._hits.clear()

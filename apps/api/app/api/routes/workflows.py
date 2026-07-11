@@ -28,6 +28,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.rate_limit import RateLimiter
 from app.db.engine import AsyncSessionLocal
 from app.db.session import get_session
 from app.engine.validator import validate_graph
@@ -40,6 +41,11 @@ from app.schemas.workflow import ValidationResult, WorkflowIn, WorkflowOut
 from app.services.task_manager import launch_run
 
 router = APIRouter()
+
+# Runs execute in-process on the same server (see task_manager) — no queue,
+# no per-worker isolation. Rate-limited per user (not per-IP: this endpoint
+# requires auth) so one account can't peg the box by spamming Run.
+_run_limiter = RateLimiter(20, 60, "Too many run requests. Try again in a minute.")
 
 
 def _utcnow() -> datetime:
@@ -179,6 +185,7 @@ async def trigger_run(
     The run executes in the background. Poll GET /runs/{id} or subscribe to
     WS /api/ws/runs/{id} for live progress.
     """
+    _run_limiter.check(str(user.id))
     wf = await _get_owned_workflow(session, workflow_id, user)
 
     # Validate the graph before running

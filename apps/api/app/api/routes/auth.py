@@ -8,9 +8,6 @@ cleared on logout). The browser sends it automatically; JS never reads it.
 
 from __future__ import annotations
 
-import time
-from collections import defaultdict
-
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -18,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
 from app.core.config import settings
+from app.core.rate_limit import RateLimiter
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_session
 from app.models.user import User
@@ -27,26 +25,15 @@ from app.services.seed import seed_workflows_for_user
 router = APIRouter()
 
 
-# ─── Login rate limit ───────────────────────────────────────────────────────
-# ponytail: in-memory sliding window, single-process only. Behind multiple
-# workers/replicas move this to Redis. Fine for a portfolio demo.
-_LOGIN_MAX_ATTEMPTS = 10
-_LOGIN_WINDOW_SECONDS = 60
-_login_hits: dict[str, list[float]] = defaultdict(list)
+# ─── Rate limits (per client IP) ────────────────────────────────────────────
+_login_limiter = RateLimiter(10, 60, "Too many login attempts. Try again in a minute.")
+# Registration is cheaper to abuse than login (no password to guess) but each
+# hit creates a DB row + seeds 3 workflows, so keep it tighter than login.
+_register_limiter = RateLimiter(5, 60, "Too many registration attempts. Try again in a minute.")
 
 
-def _rate_limit_login(request: Request) -> None:
-    ip = request.client.host if request.client else "unknown"
-    now = time.monotonic()
-    hits = [t for t in _login_hits[ip] if now - t < _LOGIN_WINDOW_SECONDS]
-    if len(hits) >= _LOGIN_MAX_ATTEMPTS:
-        _login_hits[ip] = hits
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many login attempts. Try again in a minute.",
-        )
-    hits.append(now)
-    _login_hits[ip] = hits
+def _client_ip(request: Request) -> str:
+    return request.client.host if request.client else "unknown"
 
 
 def _set_session_cookie(response: Response, user: User) -> None:
@@ -67,9 +54,11 @@ def _set_session_cookie(response: Response, user: User) -> None:
 @router.post("/register", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 async def register(
     body: RegisterIn,
+    request: Request,
     response: Response,
     session: AsyncSession = Depends(get_session),
 ):
+    _register_limiter.check(_client_ip(request))
     user = User(email=body.email.lower(), password_hash=hash_password(body.password))
     session.add(user)
     try:
@@ -96,7 +85,7 @@ async def login(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ):
-    _rate_limit_login(request)
+    _login_limiter.check(_client_ip(request))
     result = await session.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
     # Same generic error whether the email is unknown or the password is wrong.
