@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import ipaddress
 import socket
+import ssl
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -152,13 +153,22 @@ async def _execute_http(node: GraphNode, context: dict[str, Any]) -> dict[str, A
         k: resolve_value(v, context) for k, v in raw_body.items()
     }
 
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        response = await client.request(
-            method=method,
-            url=url,
-            headers=headers,
-            json=body if body else None,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.request(
+                method=method,
+                url=url,
+                headers=headers,
+                json=body if body else None,
+            )
+    except httpx.TransportError as exc:
+        if isinstance(exc.__cause__, ssl.SSLError):
+            raise ValueError(
+                f"http node: TLS handshake with '{urlsplit(url).hostname}' failed "
+                f"({exc.__cause__}) — this is a certificate/SNI problem on the "
+                "target server, not ChronoFlow."
+            ) from exc
+        raise
 
     try:
         response_body = response.json()
