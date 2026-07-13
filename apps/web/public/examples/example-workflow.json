@@ -24,7 +24,15 @@
         "position": { "x": 560, "y": 160 },
         "data": {
           "label": "Map fields",
-          "config": { "mappings": { "userName": "$.http-1.body.name", "userEmail": "$.http-1.body.email" } }
+          "config": {
+            "mappings": {
+              "userName": "$.http-1.body.name",
+              "userEmail": "$.http-1.body.email",
+              "greeting": "Hello ${$.http-1.body.name}, welcome!",
+              "summary": "Fetched $.http-1.body.name successfully",
+              "note": "Processed successfully"
+            }
+          }
         }
       },
       {

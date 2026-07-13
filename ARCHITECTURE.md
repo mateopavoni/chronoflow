@@ -70,7 +70,7 @@ Un **Workflow** es un grafo `{ nodes, edges }` (formato compatible con React Flo
 | type | Qué hace | `config` | Output |
 |------|----------|----------|--------|
 | `start` | Punto de entrada. Único por workflow. | `{}` | el `trigger_payload` de la corrida |
-| `transform` | Construye un objeto nuevo mapeando rutas JSONPath del contexto. | `{ "mappings": { "outKey": "$.node-x.field", ... } }` | objeto con las claves mapeadas |
+| `transform` | Construye un objeto nuevo. Cada valor de `mappings` se resuelve como ruta completa (`"$.node-x.field"`, valor tipado), texto compuesto con una o más rutas en cualquier parte (`"Hi $.node-x.field!"` o `"Hi ${$.node-x.field}!"`, ambas interpolan y devuelven string) o texto plano sin `$` (se devuelve tal cual). | `{ "mappings": { "outKey": "<ruta \| texto compuesto \| literal>", ... } }` | objeto con las claves mapeadas |
 | `http` | Request HTTP async real (httpx). Demuestra I/O concurrente. | `{ "method": "GET", "url": "https://...", "headers": {}, "body": {} }` (url/body admiten plantillas JSONPath `${$.node.x}`) | `{ "status": int, "body": <json> }` |
 | `delay` | `asyncio.sleep(seconds)`. Demuestra paralelismo (ramas paralelas terminan en el máximo, no en la suma). | `{ "seconds": number }` | `{ "waited": seconds }` |
 | `branch` | Evalúa una condición JSONPath y enruta. | `{ "condition": "$.node-x.value > 10" }` | `{ "result": bool }` |
@@ -123,6 +123,7 @@ conjunto de listos**:
 - Las expresiones JSONPath (`jsonpath-ng`) se evalúan **contra `context`**.
   Ej: `$.fetch-user.body.name`, `$.trigger.amount`.
 - Plantillas en strings (`http.url`, `http.body`): `${$.node.field}` se sustituye por el valor resuelto.
+- `transform.mappings`: cada valor se resuelve como ruta completa / texto compuesto / literal (ver tabla de tipos de nodo arriba). A diferencia de `http`, acepta rutas sueltas dentro del texto sin el wrapper `${...}` (`"Hi $.node.field!"` funciona igual que `"Hi ${$.node.field}!"`) — texto sin ningún `$` nunca intenta parsearse como JSONPath.
 - `branch.condition`: extracción JSONPath + operador de comparación. Operadores soportados:
   `> < >= <= == !=` y `&&` / `||`. Evaluador **propio y acotado** (NO `eval`): se parsea la
   expresión, se resuelven los JSONPath y se comparan valores. Defendible y seguro.

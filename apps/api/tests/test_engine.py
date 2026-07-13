@@ -30,7 +30,12 @@ def _simple_graph() -> dict:
     return {
         "nodes": [
             {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "Start", "config": {}}},
-            {"id": "tr", "type": "transform", "position": {"x": 0, "y": 100}, "data": {"label": "T", "config": {"mappings": {"val": "$.trigger.val"}}}},
+            {"id": "tr", "type": "transform", "position": {"x": 0, "y": 100}, "data": {"label": "T", "config": {"mappings": {
+                "val": "$.trigger.val",
+                "note": "Processed successfully",
+                "greeting": "Value: ${$.trigger.val}",
+                "summary": "Received $.trigger.val from trigger",
+            }}}},
             {"id": "end", "type": "end", "position": {"x": 0, "y": 200}, "data": {"label": "End", "config": {}}},
         ],
         "edges": [
@@ -82,7 +87,7 @@ def _branch_graph() -> dict:
 
 
 async def test_simple_pipeline_produces_correct_output(db_session, session_factory, test_user_id):
-    """start → transform → end: transform maps trigger.val correctly."""
+    """start → transform → end: transform maps a strict path, a template and a literal."""
     wf = Workflow(owner_id=test_user_id, name="test", graph=_simple_graph())
     db_session.add(wf)
     await db_session.flush()
@@ -106,6 +111,9 @@ async def test_simple_pipeline_produces_correct_output(db_session, session_facto
         # The transform node should have mapped "val" from trigger
         assert "tr" in refreshed.final_payload
         assert refreshed.final_payload["tr"]["val"] == 99
+        assert refreshed.final_payload["tr"]["note"] == "Processed successfully"
+        assert refreshed.final_payload["tr"]["greeting"] == "Value: 99"
+        assert refreshed.final_payload["tr"]["summary"] == "Received 99 from trigger"
 
 
 # ─── Test: parallelism ───────────────────────────────────────────────────────

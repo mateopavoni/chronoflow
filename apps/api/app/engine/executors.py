@@ -29,7 +29,7 @@ import httpx
 
 from app.engine.jsonpath_resolver import (
     evaluate_condition,
-    resolve,
+    resolve_mapping_value,
     resolve_template,
     resolve_value,
 )
@@ -100,13 +100,24 @@ async def _execute_start(node: GraphNode, context: dict[str, Any]) -> dict[str, 
 
 
 async def _execute_transform(node: GraphNode, context: dict[str, Any]) -> dict[str, Any]:
-    """Transform node: build a new dict by mapping JSONPath expressions.
+    """Transform node: build a new dict by mapping each value to one of 3 forms.
 
-    Config shape: { "mappings": { "outputKey": "$.sourceNode.field" } }
+    Config shape: { "mappings": { "outputKey": "<value>" } }
+
+    Each mapping value is resolved as (see resolve_mapping_value):
+      - whole-string JSONPath ("$.sourceNode.field")     → typed value, e.g. 100
+      - text composed with "$.path" or "${$.path}"       → interpolated string
+        ("Hi $.fetch-user.body.name!" and "Hi ${$.fetch-user.body.name}!" both work —
+        no need to learn the "${...}" wrapper just to compose a message)
+      - plain text with no "$" at all                    → returned unchanged
 
     Example:
-        config.mappings = { "name": "$.fetch-user.body.name", "amount": "$.trigger.amount" }
-        output = { "name": "Alice", "amount": 100 }
+        config.mappings = {
+            "name": "$.fetch-user.body.name",
+            "greeting": "Hi $.fetch-user.body.name, welcome!",
+            "note": "Processed successfully",
+        }
+        output = { "name": "Alice", "greeting": "Hi Alice, welcome!", "note": "Processed successfully" }
     """
     config = node.data.config
     mappings: dict[str, str] = config.get("mappings", {})
@@ -116,9 +127,8 @@ async def _execute_transform(node: GraphNode, context: dict[str, Any]) -> dict[s
         return {}
 
     result: dict[str, Any] = {}
-    for out_key, jsonpath_expr in mappings.items():
-        value = resolve(jsonpath_expr, context)
-        result[out_key] = value
+    for out_key, raw_value in mappings.items():
+        result[out_key] = resolve_mapping_value(raw_value, context)
     return result
 
 

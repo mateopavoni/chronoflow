@@ -82,6 +82,47 @@ def resolve_value(raw: Any, context: dict[str, Any]) -> Any:
     return raw
 
 
+# A bare JSONPath token, e.g. "$.node-x.field" or "$[0]" — matched wherever it
+# shows up inside a larger string, not just at the start.
+_BARE_PATH_RE = re.compile(r"\$\.[\w-]+(?:\.[\w-]+)*|\$\[[^\]]+\]")
+
+
+def resolve_mapping_value(value: Any, context: dict[str, Any]) -> Any:
+    """Resolve a `transform` node mapping value: strict path | flexible text | literal.
+
+    - The ENTIRE (trimmed) value is a bare JSONPath ("$.node.field" / "$[0]")
+      → strict resolution, returns the value as-is (preserves type — number,
+      dict, bool — not stringified).
+    - Otherwise, any "${...}" template placeholder OR bare "$.node.field"
+      token found ANYWHERE in the string is substituted with its resolved
+      value (stringified). This is intentionally forgiving: composing a
+      message doesn't require learning the "${...}" wrapper —
+      "Done: $.node.field" and "Done: ${$.node.field}" both work.
+    - No "$" anywhere in the string → literal text, never parsed, never raises.
+
+    Without this, any plain-text mapping value (e.g. "Done processing user")
+    hit the strict JSONPath parser and blew up with "Invalid JSONPath" — there
+    was no way to compose a literal or interpolated message.
+    """
+    if not isinstance(value, str):
+        return value
+    stripped = value.strip()
+    if _BARE_PATH_RE.fullmatch(stripped):
+        return resolve(stripped, context)
+
+    has_template = "${" in value
+    has_bare_path = _BARE_PATH_RE.search(value) is not None
+    if not has_template and not has_bare_path:
+        return value
+
+    def replace_bare(match: re.Match) -> str:
+        resolved = resolve(match.group(0), context)
+        return "" if resolved is None else str(resolved)
+
+    result = resolve_template(value, context) if has_template else value
+    return _BARE_PATH_RE.sub(replace_bare, result)
+
+
 # ─── Condition evaluator ────────────────────────────────────────────────────
 
 # Supported binary comparison operators
