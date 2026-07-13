@@ -32,6 +32,22 @@ import type { GraphEdge, GraphNode, NodeType, ValidationResult } from '../types/
 const EDGE_TRUE = '#22c55e'
 const EDGE_FALSE = '#ef4444'
 
+const KNOWN_NODE_TYPES: NodeType[] = ['start', 'transform', 'http', 'delay', 'branch', 'end']
+
+/** Validates the minimal shape importGraph relies on before trusting a user-supplied file. */
+function assertValidGraphNodes(nodes: unknown[]): asserts nodes is GraphNode[] {
+  nodes.forEach((n, i) => {
+    const node = n as { id?: unknown; type?: unknown }
+    const label = typeof node.id === 'string' && node.id ? node.id : `#${i}`
+    if (typeof node.id !== 'string' || !node.id) {
+      throw new Error(`Node ${label}: missing "id"`)
+    }
+    if (!KNOWN_NODE_TYPES.includes(node.type as NodeType)) {
+      throw new Error(`Node ${label}: invalid or missing "type" (got ${JSON.stringify(node.type)})`)
+    }
+  })
+}
+
 // ─── Convert between our Graph types and React Flow types ─────────────────────
 
 function toFlowNode(n: GraphNode): Node {
@@ -315,7 +331,8 @@ export function Editor() {
       if (!Array.isArray(parsed.graph?.nodes) || !Array.isArray(parsed.graph.edges)) {
         throw new Error('File is missing graph.nodes / graph.edges')
       }
-      const importedNodes = parsed.graph.nodes as GraphNode[]
+      assertValidGraphNodes(parsed.graph.nodes)
+      const importedNodes = parsed.graph.nodes
       const importedEdges = parsed.graph.edges as GraphEdge[]
       takeSnapshot()
       setNodes(importedNodes.map(toFlowNode))
