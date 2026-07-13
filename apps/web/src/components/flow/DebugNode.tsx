@@ -2,6 +2,7 @@ import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import type { EventStatus, NodeType } from '../../types/api'
 import { cx } from '../../lib/utils'
+import { useFlowDirection } from '../../lib/flowDirection'
 import { HANDLE_CLASS, NODE_META } from './nodeMeta'
 
 /**
@@ -40,6 +41,10 @@ export function DebugNode({ data, selected }: NodeProps) {
   const status: Status = d.status ?? 'pending'
   const { icon: Icon, tag } = NODE_META[d.nodeType] ?? NODE_META.transform
   const isBranch = d.nodeType === 'branch'
+  const direction = useFlowDirection()
+  const targetPosition = direction === 'vertical' ? Position.Left : Position.Top
+  const sourcePosition = direction === 'vertical' ? Position.Right : Position.Bottom
+  const splitAxis = direction === 'vertical' ? 'top' : 'left'
   const duration =
     d.durationMs != null
       ? d.durationMs < 1000
@@ -61,7 +66,7 @@ export function DebugNode({ data, selected }: NodeProps) {
         <div className="pointer-events-none absolute inset-[-3px] border border-primary" aria-hidden="true" />
       )}
 
-      <Handle type="target" position={Position.Top} className={HANDLE_CLASS} />
+      <Handle type="target" position={targetPosition} className={HANDLE_CLASS} />
 
       {/* Status bar */}
       <div className={cx('h-[2px] w-full', STATUS_BAR[status])} />
@@ -89,21 +94,21 @@ export function DebugNode({ data, selected }: NodeProps) {
           </div>
           <Handle
             type="source"
-            position={Position.Bottom}
+            position={sourcePosition}
             id="true"
-            style={{ left: '25%' }}
+            style={{ [splitAxis]: '25%' }}
             className="!h-2.5 !w-2.5 !rounded-none !border !border-status-success !bg-surface"
           />
           <Handle
             type="source"
-            position={Position.Bottom}
+            position={sourcePosition}
             id="false"
-            style={{ left: '75%' }}
+            style={{ [splitAxis]: '75%' }}
             className="!h-2.5 !w-2.5 !rounded-none !border !border-status-error !bg-surface"
           />
         </>
       ) : (
-        <Handle type="source" position={Position.Bottom} className={HANDLE_CLASS} />
+        <Handle type="source" position={sourcePosition} className={HANDLE_CLASS} />
       )}
     </div>
   )

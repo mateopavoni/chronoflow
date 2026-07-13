@@ -29,6 +29,8 @@ export interface GraphEdge {
 export interface Graph {
   nodes: GraphNode[]
   edges: GraphEdge[]
+  /** Canvas flow direction. Absent on old exports/workflows — treat as 'horizontal'. */
+  direction?: 'vertical' | 'horizontal'
 }
 
 // ─── Workflow ─────────────────────────────────────────────────────────────────

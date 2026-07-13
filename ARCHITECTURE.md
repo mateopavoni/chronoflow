@@ -111,7 +111,10 @@ conjunto de listos**:
 4. Cuando un nodo termina: persistir su `ExecutionEvent`, guardar su output en el `context`,
    decrementar in-degree de sus sucesores. Los que llegan a 0 entran a `ready`.
 5. **Branch:** al resolver, solo se "satisface" el edge cuyo `data.branch` coincide con el
-   resultado. La rama no tomada se **poda**: sus nodos quedan `skipped` (se registra event `skipped`).
+   resultado. La rama no tomada se resuelve **por-arista** vía skip (no un BFS que marque todo
+   el subárbol): un nodo solo queda `skipped` cuando **todos** sus edges entrantes se resolvieron
+   por skip. Un nodo de merge/fan-in con otro predecesor vivo (p.ej. `end` alimentado por ambas
+   ramas de un `branch`) sigue ejecutándose normalmente aunque una de sus ramas se pode.
 6. Termina cuando no quedan nodos `ready` ni en ejecución. Estado final del run = `completed`
    (o `failed` si algún nodo lanzó y no hay manejo).
 
@@ -207,7 +210,8 @@ interface GraphNode { id: string; type: NodeType; position: {x:number;y:number};
                       data: { label: string; config: Record<string, unknown> }; }
 interface GraphEdge { id: string; source: string; target: string;
                       data?: { branch?: "true" | "false" }; }
-interface Graph { nodes: GraphNode[]; edges: GraphEdge[]; }
+interface Graph { nodes: GraphNode[]; edges: GraphEdge[];
+                 direction?: "vertical" | "horizontal"; }  // default "horizontal"
 
 interface WorkflowIn  { name: string; description?: string; graph: Graph; }
 interface WorkflowOut { id: string; name: string; description?: string; graph: Graph;

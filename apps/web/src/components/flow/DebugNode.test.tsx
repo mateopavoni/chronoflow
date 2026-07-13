@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { DebugNode } from './DebugNode'
+import { FlowDirectionProvider } from '../../lib/flowDirection'
 import type { NodeProps } from '@xyflow/react'
 
 // React Flow's Handle components use ResizeObserver internally
@@ -12,7 +13,7 @@ vi.mock('@xyflow/react', async (importOriginal) => {
     Handle: ({ type, position }: { type: string; position: string }) => (
       <div data-testid={`handle-${type}-${position}`} />
     ),
-    Position: { Top: 'Top', Bottom: 'Bottom' },
+    Position: { Top: 'Top', Bottom: 'Bottom', Left: 'Left', Right: 'Right' },
   }
 })
 
@@ -75,5 +76,31 @@ describe('DebugNode', () => {
     const { container } = render(<DebugNode {...makeProps()} selected={true} />)
     // Selection is shown as an inset 1px border overlay (Conductor OS style).
     expect(container.querySelector('.border-primary')).toBeTruthy()
+  })
+
+  it('uses Top/Bottom handles by default (horizontal direction)', () => {
+    render(<DebugNode {...makeProps()} />)
+    expect(screen.getByTestId('handle-target-Top')).toBeTruthy()
+    expect(screen.getByTestId('handle-source-Bottom')).toBeTruthy()
+  })
+
+  it('uses Left/Right handles under a vertical FlowDirectionProvider', () => {
+    render(
+      <FlowDirectionProvider value="vertical">
+        <DebugNode {...makeProps()} />
+      </FlowDirectionProvider>,
+    )
+    expect(screen.getByTestId('handle-target-Left')).toBeTruthy()
+    expect(screen.getByTestId('handle-source-Right')).toBeTruthy()
+  })
+
+  it('uses Left/Right handles for a branch node under a vertical FlowDirectionProvider', () => {
+    render(
+      <FlowDirectionProvider value="vertical">
+        <DebugNode {...makeProps({ nodeType: 'branch', status: 'completed' })} />
+      </FlowDirectionProvider>,
+    )
+    expect(screen.getByTestId('handle-target-Left')).toBeTruthy()
+    expect(screen.getAllByTestId('handle-source-Right')).toHaveLength(2)
   })
 })

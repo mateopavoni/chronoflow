@@ -1,10 +1,12 @@
 import { Handle, Position } from '@xyflow/react'
 import type { NodeProps } from '@xyflow/react'
 import type { BranchConfig } from '../../types/api'
+import { useFlowDirection } from '../../lib/flowDirection'
 import { HANDLE_CLASS, NODE_META } from './nodeMeta'
 
 /**
- * Branch node: one input on top, two outputs on bottom (true=left, false=right).
+ * Branch node: one input, two outputs (true/false), split along whichever
+ * edge faces "downstream" for the current flow direction.
  * Uses explicit Handle IDs so edges can be labeled 'true'/'false'.
  */
 export function BranchNode({ data, selected }: NodeProps) {
@@ -13,6 +15,10 @@ export function BranchNode({ data, selected }: NodeProps) {
   const label = typeof data?.['label'] === 'string' ? data['label'] : 'Branch'
   const shortCond = condition.length > 30 ? condition.slice(0, 27) + '…' : condition
   const { icon: Icon, tag } = NODE_META.branch
+  const direction = useFlowDirection()
+  const targetPosition = direction === 'vertical' ? Position.Left : Position.Top
+  const sourcePosition = direction === 'vertical' ? Position.Right : Position.Bottom
+  const splitAxis = direction === 'vertical' ? 'top' : 'left'
 
   return (
     <div
@@ -24,7 +30,7 @@ export function BranchNode({ data, selected }: NodeProps) {
         <div className="pointer-events-none absolute inset-[-3px] border border-primary" aria-hidden="true" />
       )}
 
-      <Handle type="target" position={Position.Top} className={HANDLE_CLASS} />
+      <Handle type="target" position={targetPosition} className={HANDLE_CLASS} />
 
       <div className="h-[2px] w-full bg-outline-variant" />
 
@@ -50,16 +56,16 @@ export function BranchNode({ data, selected }: NodeProps) {
 
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={sourcePosition}
         id="true"
-        style={{ left: '25%' }}
+        style={{ [splitAxis]: '25%' }}
         className="!h-2.5 !w-2.5 !rounded-none !border !border-status-success !bg-surface"
       />
       <Handle
         type="source"
-        position={Position.Bottom}
+        position={sourcePosition}
         id="false"
-        style={{ left: '75%' }}
+        style={{ [splitAxis]: '75%' }}
         className="!h-2.5 !w-2.5 !rounded-none !border !border-status-error !bg-surface"
       />
     </div>

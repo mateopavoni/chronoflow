@@ -163,6 +163,33 @@ async def test_parallel_delays_finish_in_max_not_sum(db_session, session_factory
         assert r.status == "completed"
 
 
+def _branch_chain_graph() -> dict:
+    """start → branch → (true: tr-true | false: tr-false → mid-false) → end
+
+    The false arm has an extra hop before reconverging on `end`, so pruning
+    the false arm must skip both tr-false AND mid-false (chained skip),
+    while `end` — fed by both arms — must still run once tr-true completes.
+    """
+    return {
+        "nodes": [
+            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "S", "config": {}}},
+            {"id": "br", "type": "branch", "position": {"x": 0, "y": 100}, "data": {"label": "Br", "config": {"condition": "$.trigger.amount > 50"}}},
+            {"id": "tr-true", "type": "transform", "position": {"x": -100, "y": 200}, "data": {"label": "High", "config": {"mappings": {"path": "$.trigger.amount"}}}},
+            {"id": "tr-false", "type": "transform", "position": {"x": 100, "y": 200}, "data": {"label": "Low", "config": {"mappings": {"path": "$.trigger.amount"}}}},
+            {"id": "mid-false", "type": "transform", "position": {"x": 100, "y": 250}, "data": {"label": "Mid", "config": {"mappings": {"path": "$.trigger.amount"}}}},
+            {"id": "end", "type": "end", "position": {"x": 0, "y": 300}, "data": {"label": "End", "config": {}}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start", "target": "br"},
+            {"id": "e2", "source": "br", "target": "tr-true", "data": {"branch": "true"}},
+            {"id": "e3", "source": "br", "target": "tr-false", "data": {"branch": "false"}},
+            {"id": "e4", "source": "tr-true", "target": "end"},
+            {"id": "e5", "source": "tr-false", "target": "mid-false"},
+            {"id": "e6", "source": "mid-false", "target": "end"},
+        ],
+    }
+
+
 # ─── Test: branch pruning ────────────────────────────────────────────────────
 
 
@@ -207,6 +234,16 @@ async def test_branch_true_arm_taken_false_arm_skipped(db_session, session_facto
     assert "skipped" in tr_false_statuses
     assert "completed" not in tr_false_statuses
 
+    # end is fed by BOTH arms (fan-in) — must still run, not be skipped
+    assert "end" in events_by_node
+    end_statuses = {e.status for e in events_by_node["end"]}
+    assert "completed" in end_statuses
+    assert "skipped" not in end_statuses
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert "end" in refreshed.final_payload
+
 
 async def test_branch_false_arm_taken(db_session, session_factory, test_user_id):
     """When branch condition is False, tr-false runs and tr-true is skipped."""
@@ -235,6 +272,105 @@ async def test_branch_false_arm_taken(db_session, session_factory, test_user_id)
     assert events_by_node["tr-true"].status == "skipped"
     assert events_by_node.get("tr-false") is not None
     assert events_by_node["tr-false"].status == "completed"
+
+    # end is fed by BOTH arms (fan-in) — must still run, not be skipped
+    assert events_by_node.get("end") is not None
+    assert events_by_node["end"].status == "completed"
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert "end" in refreshed.final_payload
+
+
+# ─── Test: chained skip through a fan-in node ────────────────────────────────
+
+
+async def test_fan_in_after_chained_skip_true_branch(db_session, session_factory, test_user_id):
+    """Diamond with an extra hop on the false arm: true branch taken.
+
+    tr-false AND mid-false must both be skipped (chained skip propagation),
+    while `end` — fed by tr-true and mid-false — must still complete.
+    """
+    wf = Workflow(owner_id=test_user_id, name="chain-branch-true", graph=_branch_chain_graph())
+    db_session.add(wf)
+    await db_session.flush()
+
+    run = WorkflowRun(
+        workflow_id=wf.id,
+        status="pending",
+        trigger_payload={"amount": 100},  # 100 > 50 → true
+    )
+    db_session.add(run)
+    await db_session.commit()
+
+    async with session_factory() as session:
+        await execute_run(run_id=run.id, session=session)
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert refreshed.status == "completed"
+
+        stmt = select(ExecutionEvent).where(ExecutionEvent.run_id == run.id).order_by(ExecutionEvent.sequence)
+        result = await s.execute(stmt)
+        events = result.scalars().all()
+
+    events_by_node: dict[str, set[str]] = {}
+    for e in events:
+        events_by_node.setdefault(e.node_id, set()).add(e.status)
+
+    assert "completed" in events_by_node["tr-true"]
+    assert "skipped" in events_by_node["tr-false"]
+    assert "skipped" in events_by_node["mid-false"]
+    assert "completed" in events_by_node["end"]
+    assert "skipped" not in events_by_node["end"]
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert "end" in refreshed.final_payload
+
+
+async def test_fan_in_after_chained_skip_false_branch(db_session, session_factory, test_user_id):
+    """Diamond with an extra hop on the false arm: false branch taken.
+
+    tr-true is skipped directly; tr-false → mid-false both complete; `end`
+    (fed by tr-true and mid-false) must still complete.
+    """
+    wf = Workflow(owner_id=test_user_id, name="chain-branch-false", graph=_branch_chain_graph())
+    db_session.add(wf)
+    await db_session.flush()
+
+    run = WorkflowRun(
+        workflow_id=wf.id,
+        status="pending",
+        trigger_payload={"amount": 10},  # 10 > 50 → false
+    )
+    db_session.add(run)
+    await db_session.commit()
+
+    async with session_factory() as session:
+        await execute_run(run_id=run.id, session=session)
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert refreshed.status == "completed"
+
+        stmt = select(ExecutionEvent).where(ExecutionEvent.run_id == run.id).order_by(ExecutionEvent.sequence)
+        result = await s.execute(stmt)
+        events = result.scalars().all()
+
+    events_by_node: dict[str, set[str]] = {}
+    for e in events:
+        events_by_node.setdefault(e.node_id, set()).add(e.status)
+
+    assert "skipped" in events_by_node["tr-true"]
+    assert "completed" in events_by_node["tr-false"]
+    assert "completed" in events_by_node["mid-false"]
+    assert "completed" in events_by_node["end"]
+    assert "skipped" not in events_by_node["end"]
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert "end" in refreshed.final_payload
 
 
 # ─── Test: time-travel sequence ordering ─────────────────────────────────────
