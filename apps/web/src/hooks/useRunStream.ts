@@ -101,19 +101,27 @@ export function useRunStream(runId: string, { enabled }: UseRunStreamOptions): U
     }
   }, [runId, enabled])
 
+  // Resets the accumulated event buffer only when we start watching a
+  // different run (or on real mount/unmount) — NOT on every `enabled`
+  // toggle. `enabled` (isLive) flips false the instant a run finishes, and
+  // resetting here too used to wipe the just-received "failed" event for
+  // the node that broke, making it flash back to "pending" until the REST
+  // refetch caught up.
   useEffect(() => {
     unmounted.current = false
     setEvents([])
     setConnected(false)
     setError(null)
 
-    if (enabled) connect()
-
     return () => {
       unmounted.current = true
       socketRef.current?.close(1000, 'component unmounted')
     }
-  }, [runId, enabled, connect])
+  }, [runId])
+
+  useEffect(() => {
+    if (enabled) connect()
+  }, [enabled, connect])
 
   return { events, connected, error }
 }
