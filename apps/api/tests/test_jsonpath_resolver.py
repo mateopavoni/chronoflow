@@ -16,6 +16,7 @@ import pytest
 from app.engine.jsonpath_resolver import (
     evaluate_condition,
     resolve,
+    resolve_mapping_value,
     resolve_template,
 )
 
@@ -90,6 +91,43 @@ def test_template_multiple_placeholders():
         "${$.trigger.user}:${$.trigger.amount}", CONTEXT
     )
     assert result == "alice:150"
+
+
+# ─── resolve_mapping_value() ─────────────────────────────────────────────────
+
+
+def test_mapping_whole_string_strict_path_preserves_type():
+    # A value that IS (only) a JSONPath returns the typed value, not a string.
+    assert resolve_mapping_value("$.node-a.value", CONTEXT) == 42
+    assert resolve_mapping_value("$.trigger.active", CONTEXT) is True
+
+
+def test_mapping_template_interpolates():
+    result = resolve_mapping_value("User: ${$.trigger.user}", CONTEXT)
+    assert result == "User: alice"
+
+
+def test_mapping_literal_text_is_not_parsed():
+    # Plain text with no "$" anywhere is returned unchanged — it used to hit
+    # the strict JSONPath parser and raise "Invalid JSONPath".
+    result = resolve_mapping_value("Se procesó el usuario correctamente", CONTEXT)
+    assert result == "Se procesó el usuario correctamente"
+
+
+def test_mapping_bare_path_inside_text_is_interpolated():
+    # A bare "$.x" embedded in prose (no "${}" needed) composes a message —
+    # this is the exact pattern that used to blow up with "Invalid JSONPath".
+    value = "Procesado correctamente: $.trigger.user desde $.node-b.status"
+    assert resolve_mapping_value(value, CONTEXT) == "Procesado correctamente: alice desde ok"
+
+
+def test_mapping_bare_path_missing_value_becomes_empty():
+    assert resolve_mapping_value("x=$.trigger.missing", CONTEXT) == "x="
+
+
+def test_mapping_non_string_passthrough():
+    assert resolve_mapping_value(42, CONTEXT) == 42
+    assert resolve_mapping_value(None, CONTEXT) is None
 
 
 # ─── evaluate_condition() ────────────────────────────────────────────────────

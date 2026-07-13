@@ -13,7 +13,7 @@ import {
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, CheckCircle2, HelpCircle, Play, Redo2, Undo2, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, HelpCircle, LayoutGrid, Play, Redo2, Undo2, XCircle } from 'lucide-react'
 
 import { useRunWorkflow, useUpdateWorkflow, useValidateWorkflow, useWorkflow } from '../hooks/useWorkflows'
 import { NODE_TYPES } from '../components/flow/nodeTypes'
@@ -25,6 +25,7 @@ import { ErrorBanner } from '../components/ui/ErrorBanner'
 import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { generateId, tryParseJson } from '../lib/utils'
 import { cloneWithNewIds, extractSelection, type ClipboardData } from '../lib/clipboard'
+import { layoutGraph } from '../lib/layout'
 import { useTheme } from '../lib/theme'
 import type { GraphEdge, GraphNode, NodeType, ValidationResult } from '../types/api'
 
@@ -181,6 +182,12 @@ export function Editor() {
     setSelectedNodeId(null)
     bumpHistory()
   }, [setNodes, setEdges])
+
+  /** Re-arrange all nodes into left-to-right levels (fixes messy/overlapping imports). */
+  const autoArrange = useCallback(() => {
+    takeSnapshot()
+    setNodes(layoutGraph(nodesRef.current, edgesRef.current))
+  }, [takeSnapshot, setNodes])
 
   /** Copy the current selection to the in-memory clipboard. Returns false if empty. */
   const copySelection = useCallback(() => {
@@ -450,6 +457,9 @@ export function Editor() {
           <button onClick={exportGraph} className={BTN_SECONDARY}>
             Export
           </button>
+          <button onClick={autoArrange} className={BTN_ICON} title="Auto-arrange nodes" aria-label="Auto-arrange nodes">
+            <LayoutGrid size={14} />
+          </button>
           <button
             onClick={() => setShowImportHelp(true)}
             className={BTN_ICON}
@@ -571,7 +581,13 @@ export function Editor() {
           </pre>
           <ul className="list-inside list-disc font-mono text-[11px] text-on-surface-variant">
             <li>Node ids must be unique and are what JSONPath expressions reference (e.g. "$.nodeId.field").</li>
-            <li>transform config: {'{ "mappings": { "outKey": "$.nodeId.field" } }'}</li>
+            <li>
+              transform config: {'{ "mappings": { "outKey": "<value>" } }'} — each value is resolved as:
+              a whole-string path ({'"$.nodeId.field"'}, returns the typed value), composed text
+              with one or more paths anywhere inside it ({'"Hi $.nodeId.field!"'} or
+              {'"Hi ${$.nodeId.field}!"'}, both interpolate into a string), or plain text with no
+              {'"$"'} at all ({'"Done processing"'}, returned unchanged).
+            </li>
             <li>http config: {'{ "method": "GET", "url": "..." }'} (response lands under "$.nodeId.body")</li>
             <li>delay config: {'{ "seconds": 1 }'}</li>
             <li>branch config: {'{ "condition": "$.nodeId.value > 10" }'}, and its outgoing edges need {'data: { "branch": "true" | "false" }'}</li>
