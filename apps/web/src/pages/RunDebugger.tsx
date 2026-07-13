@@ -47,15 +47,49 @@ export function RunDebugger() {
   }, [restEvents, wsEvents])
 
   const [scrubK, setScrubK] = useState<number>(-1)
+  // Follows the live timeline as new events arrive. Decoupled from `isLive`
+  // (which flips off as soon as the REST poll sees a terminal run status) —
+  // gating on isLive alone could freeze the scrubber before the WS delivered
+  // the last node's terminal event, leaving it stuck on "pending" forever.
+  const [autoFollow, setAutoFollow] = useState(true)
 
   useEffect(() => {
-    if (isLive && allEvents.length > 0) setScrubK(allEvents.length - 1)
-  }, [isLive, allEvents.length])
+    if (autoFollow && allEvents.length > 0) setScrubK(allEvents.length - 1)
+  }, [autoFollow, allEvents.length])
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
 
+  useEffect(() => {
+    setAutoFollow(true)
+    setSelectedNodeId(null)
+  }, [id])
+
   const nodeIds = useMemo(() => (workflow?.graph.nodes ?? []).map((n) => n.id), [workflow])
   const replayStateMap = useMemo(() => computeReplayState(allEvents, scrubK, nodeIds), [allEvents, scrubK, nodeIds])
+
+  const nodeProgress = useMemo(() => {
+    let done = 0
+    const failedIds: string[] = []
+    for (const nid of nodeIds) {
+      const status = replayStateMap.get(nid)?.status
+      if (status === 'completed' || status === 'failed' || status === 'skipped') done++
+      if (status === 'failed') failedIds.push(nid)
+    }
+    return { done, total: nodeIds.length, failedIds }
+  }, [nodeIds, replayStateMap])
+
+  const jumpToNode = useCallback(
+    (nodeId: string) => {
+      const rs = replayStateMap.get(nodeId)
+      if (!rs?.event) return
+      const idx = allEvents.findIndex((e) => e.id === rs.event!.id)
+      if (idx < 0) return
+      setAutoFollow(false)
+      setScrubK(idx)
+      setSelectedNodeId(nodeId)
+    },
+    [replayStateMap, allEvents],
+  )
 
   const flowNodes: Node[] = useMemo(() => {
     if (!workflow) return []
@@ -147,8 +181,23 @@ export function RunDebugger() {
 
         <div className="ml-auto flex items-center gap-3">
           <span className="font-mono text-label-xs text-on-surface-variant">
-            {allEvents.length} event{allEvents.length !== 1 ? 's' : ''}
+            {nodeProgress.done}/{nodeProgress.total} steps
           </span>
+          {nodeProgress.failedIds.length > 0 && (
+            <div className="flex items-center gap-1" role="list" aria-label="Failed nodes">
+              {nodeProgress.failedIds.map((nid) => (
+                <button
+                  key={nid}
+                  role="listitem"
+                  onClick={() => jumpToNode(nid)}
+                  title={`Jump to failed node: ${nid}`}
+                  className="border border-status-error px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wide text-status-error transition-colors hover:bg-status-error hover:text-on-primary"
+                >
+                  {nid.slice(0, 10)}
+                </button>
+              ))}
+            </div>
+          )}
           <button
             onClick={() => void handleReplay()}
             disabled={replayMutation.isPending}
@@ -191,10 +240,10 @@ export function RunDebugger() {
             </div>
 
             <div className="flex items-center gap-2">
-              <ScrubButton label="First" onClick={() => setScrubK(-1)}>
+              <ScrubButton label="First" onClick={() => { setAutoFollow(false); setScrubK(-1) }}>
                 <SkipBack size={14} />
               </ScrubButton>
-              <ScrubButton label="Prev" onClick={() => setScrubK((k) => Math.max(-1, k - 1))}>
+              <ScrubButton label="Prev" onClick={() => { setAutoFollow(false); setScrubK((k) => Math.max(-1, k - 1)) }}>
                 <ChevronLeft size={14} />
               </ScrubButton>
 
@@ -203,20 +252,20 @@ export function RunDebugger() {
                 min={-1}
                 max={maxK}
                 value={scrubK}
-                onChange={(e) => setScrubK(parseInt(e.target.value, 10))}
+                onChange={(e) => { setAutoFollow(false); setScrubK(parseInt(e.target.value, 10)) }}
                 className="flex-1"
                 aria-label="Timeline scrubber"
               />
 
-              <ScrubButton label="Next" onClick={() => setScrubK((k) => Math.min(maxK, k + 1))}>
+              <ScrubButton label="Next" onClick={() => { setAutoFollow(false); setScrubK((k) => Math.min(maxK, k + 1)) }}>
                 <ChevronRight size={14} />
               </ScrubButton>
-              <ScrubButton label="Last" onClick={() => setScrubK(maxK)}>
+              <ScrubButton label="Last" onClick={() => { setAutoFollow(true); setScrubK(maxK) }}>
                 <SkipForward size={14} />
               </ScrubButton>
             </div>
 
-            <EventTimeline events={allEvents} currentK={scrubK} onSelect={setScrubK} />
+            <EventTimeline events={allEvents} currentK={scrubK} onSelect={(k) => { setAutoFollow(false); setScrubK(k) }} />
           </div>
         </main>
 
