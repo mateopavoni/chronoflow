@@ -43,3 +43,4 @@ class GraphEdge(BaseModel):
 class Graph(BaseModel):
     nodes: list[GraphNode]
     edges: list[GraphEdge]
+    direction: Literal["vertical", "horizontal"] = "horizontal"

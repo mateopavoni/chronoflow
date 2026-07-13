@@ -49,4 +49,28 @@ describe('layoutGraph', () => {
     expect(out).toHaveLength(1)
     expect(out[0].position).toEqual({ x: 80, y: 160 })
   })
+
+  it('spreads a simple chain top-to-bottom by level in vertical direction', () => {
+    const nodes = [node('a'), node('b'), node('c')]
+    const edges = [edge('e1', 'a', 'b'), edge('e2', 'b', 'c')]
+    const out = layoutGraph(nodes, edges, 'vertical')
+    const pos = Object.fromEntries(out.map((n) => [n.id, n.position]))
+    expect(pos.a.y).toBeLessThan(pos.b.y)
+    expect(pos.b.y).toBeLessThan(pos.c.y)
+  })
+
+  it('puts fan-out branches on the same level (Y), spread on X, in vertical direction', () => {
+    const nodes = [node('start'), node('true-branch'), node('false-branch'), node('end')]
+    const edges = [
+      edge('e1', 'start', 'true-branch'),
+      edge('e2', 'start', 'false-branch'),
+      edge('e3', 'true-branch', 'end'),
+      edge('e4', 'false-branch', 'end'),
+    ]
+    const out = layoutGraph(nodes, edges, 'vertical')
+    const pos = Object.fromEntries(out.map((n) => [n.id, n.position]))
+    expect(pos['true-branch'].y).toBe(pos['false-branch'].y)
+    expect(pos['true-branch'].x).not.toBe(pos['false-branch'].x)
+    expect(pos.end.y).toBeGreaterThan(pos['true-branch'].y)
+  })
 })
