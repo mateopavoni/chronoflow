@@ -10,9 +10,15 @@ Protocol:
      closes 4004 otherwise (same code/message as "not found" — a run that
      belongs to someone else must be indistinguishable from one that doesn't
      exist, same rule as the REST routes in workflows.py/runs.py).
-  4. Server sends all already-persisted events (catch-up, in case the client
-     connected after some events were already emitted).
-  5. Server subscribes to the in-process pub/sub channel for this run.
+  4. Server subscribes to the in-process pub/sub channel for this run FIRST
+     (before any DB read) so no event published in between can be missed —
+     engine events are only flush()ed, not committed, until the run ends, so
+     a separate DB session can't see them until then; the live queue is the
+     only channel that catches events for a run still in progress.
+  5. Server sends all already-persisted events (catch-up, in case the client
+     connected after some events were already committed), then drains
+     anything already queued live, deduping by event id against what catch-up
+     already sent.
   6. Server sends new events as they arrive (live streaming).
   7. When the run finishes (completed/failed) the server sends a final
      {"type": "run_finished", "status": "..."} message and closes.
@@ -56,50 +62,71 @@ async def ws_run_events(
         await websocket.close(code=4401)
         return
 
-    # ── Step 1: catch-up — send all already-persisted events ────────────
-    async with AsyncSessionLocal() as session:
-        # Verify the run exists AND its workflow is owned by this user.
-        stmt = (
-            select(WorkflowRun)
-            .join(Workflow, WorkflowRun.workflow_id == Workflow.id)
-            .where(WorkflowRun.id == run_id, Workflow.owner_id == user_id)
-        )
-        result = await session.execute(stmt)
-        run = result.scalar_one_or_none()
-        if run is None:
-            await websocket.send_json({"error": f"Run {run_id} not found"})
-            await websocket.close(code=4004)
-            return
-
-        # Send existing events so the client can reconstruct current state
-        stmt = (
-            select(ExecutionEvent)
-            .where(ExecutionEvent.run_id == run_id)
-            .order_by(ExecutionEvent.sequence)
-        )
-        result = await session.execute(stmt)
-        existing_events = result.scalars().all()
-
-        for event in existing_events:
-            out = ExecutionEventOut.model_validate(event)
-            await websocket.send_text(out.model_dump_json())
-
-        # If run is already finished, send terminal message and close
-        if run.status in ("completed", "failed"):
-            await websocket.send_json({"type": "run_finished", "status": run.status})
-            await websocket.close()
-            return
-
-    # ── Step 2: subscribe and stream live events ─────────────────────────
+    # ── Step 1: subscribe FIRST, so no event published between "read
+    # persisted events" and "start listening live" can be lost. Events are
+    # only flush()ed (not commit()ted) by the engine until the run finishes,
+    # so a run in progress is invisible to the catch-up query below — the
+    # in-process queue is the only channel that can see it in time.
     queue = subscribe(run_id_str)
+    sent_ids: set[uuid.UUID] = set()
 
     try:
+        # ── Step 2: catch-up — send all already-persisted events ────────
+        async with AsyncSessionLocal() as session:
+            # Verify the run exists AND its workflow is owned by this user.
+            stmt = (
+                select(WorkflowRun)
+                .join(Workflow, WorkflowRun.workflow_id == Workflow.id)
+                .where(WorkflowRun.id == run_id, Workflow.owner_id == user_id)
+            )
+            result = await session.execute(stmt)
+            run = result.scalar_one_or_none()
+            if run is None:
+                await websocket.send_json({"error": f"Run {run_id} not found"})
+                await websocket.close(code=4004)
+                return
+
+            # Send existing events so the client can reconstruct current state
+            stmt = (
+                select(ExecutionEvent)
+                .where(ExecutionEvent.run_id == run_id)
+                .order_by(ExecutionEvent.sequence)
+            )
+            result = await session.execute(stmt)
+            existing_events = result.scalars().all()
+
+            for event in existing_events:
+                out = ExecutionEventOut.model_validate(event)
+                await websocket.send_text(out.model_dump_json())
+                sent_ids.add(event.id)
+
+            already_finished = run.status in ("completed", "failed")
+            final_status = run.status
+
+        # Drain anything that landed on the queue during/after the catch-up
+        # read (possibly overlapping with what catch-up already sent) —
+        # skip duplicates by event id.
+        while not queue.empty():
+            extra_event = queue.get_nowait()
+            if extra_event.id in sent_ids:
+                continue
+            extra_out = ExecutionEventOut.model_validate(extra_event)
+            await websocket.send_text(extra_out.model_dump_json())
+            sent_ids.add(extra_event.id)
+
+        if already_finished:
+            await websocket.send_json({"type": "run_finished", "status": final_status})
+            return
+
+        # ── Step 3: stream live events ────────────────────────────────
         while True:
             # Block until a new event arrives from the engine
             event = await queue.get()
 
-            out = ExecutionEventOut.model_validate(event)
-            await websocket.send_text(out.model_dump_json())
+            if event.id not in sent_ids:
+                out = ExecutionEventOut.model_validate(event)
+                await websocket.send_text(out.model_dump_json())
+                sent_ids.add(event.id)
 
             # Check if this event signals end of run
             # The runner marks the run as completed/failed after all events are emitted.
@@ -113,8 +140,11 @@ async def ws_run_events(
                     # Drain remaining queued events before closing
                     while not queue.empty():
                         extra_event = queue.get_nowait()
+                        if extra_event.id in sent_ids:
+                            continue
                         extra_out = ExecutionEventOut.model_validate(extra_event)
                         await websocket.send_text(extra_out.model_dump_json())
+                        sent_ids.add(extra_event.id)
                     await websocket.send_json(
                         {"type": "run_finished", "status": run_check.status}
                     )

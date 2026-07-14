@@ -16,9 +16,9 @@ export function BranchNode({ data, selected }: NodeProps) {
   const shortCond = condition.length > 30 ? condition.slice(0, 27) + '…' : condition
   const { icon: Icon, tag } = NODE_META.branch
   const direction = useFlowDirection()
-  const targetPosition = direction === 'vertical' ? Position.Left : Position.Top
-  const sourcePosition = direction === 'vertical' ? Position.Right : Position.Bottom
-  const splitAxis = direction === 'vertical' ? 'top' : 'left'
+  const targetPosition = direction === 'horizontal' ? Position.Left : Position.Top
+  const sourcePosition = direction === 'horizontal' ? Position.Right : Position.Bottom
+  const splitAxis = direction === 'horizontal' ? 'top' : 'left'
 
   return (
     <div

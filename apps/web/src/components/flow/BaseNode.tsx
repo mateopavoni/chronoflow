@@ -32,8 +32,8 @@ export function BaseNode({
   selected = false,
 }: BaseNodeProps) {
   const direction = useFlowDirection()
-  const targetPosition = direction === 'vertical' ? Position.Left : Position.Top
-  const sourcePosition = direction === 'vertical' ? Position.Right : Position.Bottom
+  const targetPosition = direction === 'horizontal' ? Position.Left : Position.Top
+  const sourcePosition = direction === 'horizontal' ? Position.Right : Position.Bottom
 
   return (
     <div

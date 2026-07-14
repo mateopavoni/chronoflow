@@ -78,29 +78,29 @@ describe('DebugNode', () => {
     expect(container.querySelector('.border-primary')).toBeTruthy()
   })
 
-  it('uses Top/Bottom handles by default (horizontal direction)', () => {
+  it('uses Left/Right handles by default (horizontal direction)', () => {
     render(<DebugNode {...makeProps()} />)
-    expect(screen.getByTestId('handle-target-Top')).toBeTruthy()
-    expect(screen.getByTestId('handle-source-Bottom')).toBeTruthy()
+    expect(screen.getByTestId('handle-target-Left')).toBeTruthy()
+    expect(screen.getByTestId('handle-source-Right')).toBeTruthy()
   })
 
-  it('uses Left/Right handles under a vertical FlowDirectionProvider', () => {
+  it('uses Top/Bottom handles under a vertical FlowDirectionProvider', () => {
     render(
       <FlowDirectionProvider value="vertical">
         <DebugNode {...makeProps()} />
       </FlowDirectionProvider>,
     )
-    expect(screen.getByTestId('handle-target-Left')).toBeTruthy()
-    expect(screen.getByTestId('handle-source-Right')).toBeTruthy()
+    expect(screen.getByTestId('handle-target-Top')).toBeTruthy()
+    expect(screen.getByTestId('handle-source-Bottom')).toBeTruthy()
   })
 
-  it('uses Left/Right handles for a branch node under a vertical FlowDirectionProvider', () => {
+  it('uses Top/Bottom handles for a branch node under a vertical FlowDirectionProvider', () => {
     render(
       <FlowDirectionProvider value="vertical">
         <DebugNode {...makeProps({ nodeType: 'branch', status: 'completed' })} />
       </FlowDirectionProvider>,
     )
-    expect(screen.getByTestId('handle-target-Left')).toBeTruthy()
-    expect(screen.getAllByTestId('handle-source-Right')).toHaveLength(2)
+    expect(screen.getByTestId('handle-target-Top')).toBeTruthy()
+    expect(screen.getAllByTestId('handle-source-Bottom')).toHaveLength(2)
   })
 })
