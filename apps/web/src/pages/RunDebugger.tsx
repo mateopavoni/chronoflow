@@ -17,6 +17,7 @@ import { formatDateTime, formatDuration, cx } from '../lib/utils'
 import { useTheme } from '../lib/theme'
 import type { ExecutionEventOut, GraphNode, RunOut } from '../types/api'
 import { DebugNode } from '../components/flow/DebugNode'
+import { FlowDirectionProvider } from '../lib/flowDirection'
 
 const DEBUG_NODE_TYPES = { debugNode: DebugNode } as const
 const EDGE_TRUE = '#22c55e'
@@ -213,21 +214,23 @@ export function RunDebugger() {
       <div className="flex flex-1 overflow-hidden">
         <main className="flex flex-1 flex-col overflow-hidden border-r border-outline-variant">
           <div className="relative flex-1 dot-matrix">
-            <ReactFlow
-              nodes={flowNodes}
-              edges={flowEdges}
-              nodeTypes={DEBUG_NODE_TYPES}
-              onNodeClick={onNodeClick}
-              onPaneClick={() => setSelectedNodeId(null)}
-              fitView
-              nodesDraggable={false}
-              nodesConnectable={false}
-              elementsSelectable
-              proOptions={{ hideAttribution: false }}
-            >
-              <Background color={dotColor} gap={16} />
-              <Controls />
-            </ReactFlow>
+            <FlowDirectionProvider value={workflow?.graph.direction ?? 'horizontal'}>
+              <ReactFlow
+                nodes={flowNodes}
+                edges={flowEdges}
+                nodeTypes={DEBUG_NODE_TYPES}
+                onNodeClick={onNodeClick}
+                onPaneClick={() => setSelectedNodeId(null)}
+                fitView
+                nodesDraggable={false}
+                nodesConnectable={false}
+                elementsSelectable
+                proOptions={{ hideAttribution: false }}
+              >
+                <Background color={dotColor} gap={16} />
+                <Controls />
+              </ReactFlow>
+            </FlowDirectionProvider>
           </div>
 
           {/* Timeline scrubber */}

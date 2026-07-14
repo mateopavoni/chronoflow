@@ -2,6 +2,7 @@ import { Handle, Position } from '@xyflow/react'
 import type { ReactNode } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { cx } from '../../lib/utils'
+import { useFlowDirection } from '../../lib/flowDirection'
 import { HANDLE_CLASS } from './nodeMeta'
 
 interface BaseNodeProps {
@@ -30,6 +31,10 @@ export function BaseNode({
   hasOutput = true,
   selected = false,
 }: BaseNodeProps) {
+  const direction = useFlowDirection()
+  const targetPosition = direction === 'horizontal' ? Position.Left : Position.Top
+  const sourcePosition = direction === 'horizontal' ? Position.Right : Position.Bottom
+
   return (
     <div
       className="relative min-w-[180px] max-w-[240px] border border-outline-variant bg-surface text-on-surface"
@@ -40,7 +45,7 @@ export function BaseNode({
         <div className="pointer-events-none absolute inset-[-3px] border border-primary" aria-hidden="true" />
       )}
 
-      {hasInput && <Handle type="target" position={Position.Top} className={HANDLE_CLASS} />}
+      {hasInput && <Handle type="target" position={targetPosition} className={HANDLE_CLASS} />}
 
       {/* Top accent bar */}
       <div className={cx('h-[2px] w-full', accentClass)} />
@@ -59,7 +64,7 @@ export function BaseNode({
         <div className="px-2 py-1.5 font-mono text-label-xs text-on-surface-variant">{children}</div>
       )}
 
-      {hasOutput && <Handle type="source" position={Position.Bottom} className={HANDLE_CLASS} />}
+      {hasOutput && <Handle type="source" position={sourcePosition} className={HANDLE_CLASS} />}
     </div>
   )
 }
