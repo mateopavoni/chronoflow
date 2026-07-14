@@ -42,9 +42,9 @@ export function DebugNode({ data, selected }: NodeProps) {
   const { icon: Icon, tag } = NODE_META[d.nodeType] ?? NODE_META.transform
   const isBranch = d.nodeType === 'branch'
   const direction = useFlowDirection()
-  const targetPosition = direction === 'vertical' ? Position.Left : Position.Top
-  const sourcePosition = direction === 'vertical' ? Position.Right : Position.Bottom
-  const splitAxis = direction === 'vertical' ? 'top' : 'left'
+  const targetPosition = direction === 'horizontal' ? Position.Left : Position.Top
+  const sourcePosition = direction === 'horizontal' ? Position.Right : Position.Bottom
+  const splitAxis = direction === 'horizontal' ? 'top' : 'left'
   const duration =
     d.durationMs != null
       ? d.durationMs < 1000
