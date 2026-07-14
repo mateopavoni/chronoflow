@@ -1,13 +1,16 @@
 import type { Edge, Node } from '@xyflow/react'
 
-const X_START = 80
-const Y_START = 160
-const X_STEP = 240
-const Y_STEP = 140
+const LEVEL_START = 80
+const SIBLING_START = 160
+const LEVEL_STEP = 240
+const SIBLING_STEP = 140
 
 /**
- * Lay out nodes left-to-right by topological level (longest path from the
- * roots — nodes with no incoming edges), one column per level.
+ * Lay out nodes by topological level (longest path from the roots — nodes
+ * with no incoming edges), one column/row per level.
+ *
+ * direction 'horizontal' (default): level → X, siblings stacked on Y (left-to-right flow).
+ * direction 'vertical': level → Y, siblings spread on X (top-to-bottom flow).
  *
  * ponytail: no real graph-layout library (no dagre/elkjs dependency) — this
  * is a plain Kahn's-algorithm pass, good enough for this project's simple
@@ -17,7 +20,11 @@ const Y_STEP = 140
  * them before a graph can be saved/run) — any node a cycle leaves unreached
  * just falls back to level 0.
  */
-export function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
+export function layoutGraph(
+  nodes: Node[],
+  edges: Edge[],
+  direction: 'vertical' | 'horizontal' = 'horizontal',
+): Node[] {
   const remaining = new Map<string, number>()
   const outgoing = new Map<string, string[]>()
   for (const n of nodes) {
@@ -58,6 +65,9 @@ export function layoutGraph(nodes: Node[], edges: Edge[]): Node[] {
     const l = level.get(n.id) ?? 0
     const i = perLevelCount.get(l) ?? 0
     perLevelCount.set(l, i + 1)
-    return { ...n, position: { x: X_START + l * X_STEP, y: Y_START + i * Y_STEP } }
+    const levelPos = LEVEL_START + l * LEVEL_STEP
+    const siblingPos = SIBLING_START + i * SIBLING_STEP
+    const position = direction === 'vertical' ? { x: siblingPos, y: levelPos } : { x: levelPos, y: siblingPos }
+    return { ...n, position }
   })
 }

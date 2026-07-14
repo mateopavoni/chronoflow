@@ -13,7 +13,7 @@ import {
   type Node,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { ArrowLeft, CheckCircle2, HelpCircle, LayoutGrid, Play, Redo2, Undo2, XCircle } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, Columns3, HelpCircle, LayoutGrid, Play, Redo2, Rows3, Undo2, XCircle } from 'lucide-react'
 
 import { useRunWorkflow, useUpdateWorkflow, useValidateWorkflow, useWorkflow } from '../hooks/useWorkflows'
 import { NODE_TYPES } from '../components/flow/nodeTypes'
@@ -26,6 +26,7 @@ import { ThemeToggle } from '../components/ui/ThemeToggle'
 import { generateId, tryParseJson } from '../lib/utils'
 import { cloneWithNewIds, extractSelection, type ClipboardData } from '../lib/clipboard'
 import { layoutGraph } from '../lib/layout'
+import { FlowDirectionProvider, type FlowDirection } from '../lib/flowDirection'
 import { useTheme } from '../lib/theme'
 import type { GraphEdge, GraphNode, NodeType, ValidationResult } from '../types/api'
 
@@ -120,6 +121,7 @@ export function Editor() {
 
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([])
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([])
+  const [direction, setDirection] = useState<FlowDirection>('horizontal')
   const [initialized, setInitialized] = useState(false)
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null)
@@ -136,6 +138,7 @@ export function Editor() {
   if (workflow && !initialized) {
     setNodes(workflow.graph.nodes.map(toFlowNode))
     setEdges(workflow.graph.edges.map(toFlowEdge))
+    setDirection(workflow.graph.direction ?? 'horizontal')
     setNameEdit(workflow.name)
     setInitialized(true)
   }
@@ -147,9 +150,12 @@ export function Editor() {
   nodesRef.current = nodes
   const edgesRef = useRef(edges)
   edgesRef.current = edges
+  const directionRef = useRef(direction)
+  directionRef.current = direction
 
-  const past = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
-  const future = useRef<{ nodes: Node[]; edges: Edge[] }[]>([])
+  type HistoryEntry = { nodes: Node[]; edges: Edge[]; direction: FlowDirection }
+  const past = useRef<HistoryEntry[]>([])
+  const future = useRef<HistoryEntry[]>([])
   const clipboard = useRef<ClipboardData | null>(null)
   // Force a re-render so the toolbar's undo/redo enabled state stays in sync
   // (history lives in refs, which don't trigger renders on their own).
@@ -157,7 +163,7 @@ export function Editor() {
 
   /** Snapshot the current canvas onto the undo stack (call BEFORE a mutation). */
   const takeSnapshot = useCallback(() => {
-    past.current.push({ nodes: nodesRef.current, edges: edgesRef.current })
+    past.current.push({ nodes: nodesRef.current, edges: edgesRef.current, direction: directionRef.current })
     if (past.current.length > 50) past.current.shift()
     future.current = []
     bumpHistory()
@@ -166,9 +172,10 @@ export function Editor() {
   const undo = useCallback(() => {
     const prev = past.current.pop()
     if (!prev) return
-    future.current.push({ nodes: nodesRef.current, edges: edgesRef.current })
+    future.current.push({ nodes: nodesRef.current, edges: edgesRef.current, direction: directionRef.current })
     setNodes(prev.nodes)
     setEdges(prev.edges)
+    setDirection(prev.direction)
     setSelectedNodeId(null)
     bumpHistory()
   }, [setNodes, setEdges])
@@ -176,17 +183,26 @@ export function Editor() {
   const redo = useCallback(() => {
     const next = future.current.pop()
     if (!next) return
-    past.current.push({ nodes: nodesRef.current, edges: edgesRef.current })
+    past.current.push({ nodes: nodesRef.current, edges: edgesRef.current, direction: directionRef.current })
     setNodes(next.nodes)
     setEdges(next.edges)
+    setDirection(next.direction)
     setSelectedNodeId(null)
     bumpHistory()
   }, [setNodes, setEdges])
 
-  /** Re-arrange all nodes into left-to-right levels (fixes messy/overlapping imports). */
+  /** Re-arrange all nodes into levels along the current flow direction (fixes messy/overlapping imports). */
   const autoArrange = useCallback(() => {
     takeSnapshot()
-    setNodes(layoutGraph(nodesRef.current, edgesRef.current))
+    setNodes(layoutGraph(nodesRef.current, edgesRef.current, directionRef.current))
+  }, [takeSnapshot, setNodes])
+
+  /** Flip flow direction (vertical/horizontal) and immediately re-arrange to match. */
+  const toggleDirection = useCallback(() => {
+    takeSnapshot()
+    const next = directionRef.current === 'horizontal' ? 'vertical' : 'horizontal'
+    setDirection(next)
+    setNodes(layoutGraph(nodesRef.current, edgesRef.current, next))
   }, [takeSnapshot, setNodes])
 
   /** Copy the current selection to the in-memory clipboard. Returns false if empty. */
@@ -301,7 +317,7 @@ export function Editor() {
     await updateMutation.mutateAsync({
       name: nameEdit,
       description: workflow.description,
-      graph: { nodes: nodes.map(fromFlowNode), edges: edges.map(fromFlowEdge) },
+      graph: { nodes: nodes.map(fromFlowNode), edges: edges.map(fromFlowEdge), direction },
     })
   }
 
@@ -318,7 +334,7 @@ export function Editor() {
     const payload = {
       name: nameEdit,
       description: workflow?.description,
-      graph: { nodes: nodes.map(fromFlowNode), edges: edges.map(fromFlowEdge) },
+      graph: { nodes: nodes.map(fromFlowNode), edges: edges.map(fromFlowEdge), direction },
     }
     const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' }))
     const a = document.createElement('a')
@@ -334,16 +350,21 @@ export function Editor() {
     e.target.value = ''
     if (!file) return
     try {
-      const parsed = JSON.parse(await file.text()) as { name?: unknown; graph?: { nodes?: unknown; edges?: unknown } }
+      const parsed = JSON.parse(await file.text()) as {
+        name?: unknown
+        graph?: { nodes?: unknown; edges?: unknown; direction?: unknown }
+      }
       if (!Array.isArray(parsed.graph?.nodes) || !Array.isArray(parsed.graph.edges)) {
         throw new Error('File is missing graph.nodes / graph.edges')
       }
       assertValidGraphNodes(parsed.graph.nodes)
       const importedNodes = parsed.graph.nodes
       const importedEdges = parsed.graph.edges as GraphEdge[]
+      const importedDirection = parsed.graph.direction === 'vertical' ? 'vertical' : 'horizontal'
       takeSnapshot()
       setNodes(importedNodes.map(toFlowNode))
       setEdges(importedEdges.map(toFlowEdge))
+      setDirection(importedDirection)
       if (typeof parsed.name === 'string') setNameEdit(parsed.name)
       setSelectedNodeId(null)
       setImportError(null)
@@ -461,6 +482,14 @@ export function Editor() {
             <LayoutGrid size={14} />
           </button>
           <button
+            onClick={toggleDirection}
+            className={BTN_ICON}
+            title={direction === 'horizontal' ? 'Switch to vertical layout' : 'Switch to horizontal layout'}
+            aria-label="Toggle layout direction"
+          >
+            {direction === 'horizontal' ? <Columns3 size={14} /> : <Rows3 size={14} />}
+          </button>
+          <button
             onClick={() => setShowImportHelp(true)}
             className={BTN_ICON}
             title="Import/export JSON format"
@@ -512,30 +541,32 @@ export function Editor() {
         <NodePalette onAdd={addNode} />
 
         <main className="relative flex-1 dot-matrix" aria-label="Workflow canvas">
-          <ReactFlow
-            nodes={nodes}
-            edges={edges}
-            onNodesChange={onNodesChange}
-            onEdgesChange={onEdgesChange}
-            onConnect={onConnect}
-            onNodeDragStart={() => takeSnapshot()}
-            deleteKeyCode={null}
-            multiSelectionKeyCode={['Shift']}
-            nodeTypes={NODE_TYPES}
-            onNodeClick={(e, node) => {
-              // Shift+click is a multi-select gesture — don't hijack it to open
-              // the single-node config drawer.
-              if (e.shiftKey) return
-              setSelectedNodeId(node.id)
-            }}
-            onPaneClick={() => setSelectedNodeId(null)}
-            fitView
-            proOptions={{ hideAttribution: false }}
-          >
-            <Background color={dotColor} gap={16} />
-            <Controls />
-            <MiniMap />
-          </ReactFlow>
+          <FlowDirectionProvider value={direction}>
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              onNodesChange={onNodesChange}
+              onEdgesChange={onEdgesChange}
+              onConnect={onConnect}
+              onNodeDragStart={() => takeSnapshot()}
+              deleteKeyCode={null}
+              multiSelectionKeyCode={['Shift']}
+              nodeTypes={NODE_TYPES}
+              onNodeClick={(e, node) => {
+                // Shift+click is a multi-select gesture — don't hijack it to open
+                // the single-node config drawer.
+                if (e.shiftKey) return
+                setSelectedNodeId(node.id)
+              }}
+              onPaneClick={() => setSelectedNodeId(null)}
+              fitView
+              proOptions={{ hideAttribution: false }}
+            >
+              <Background color={dotColor} gap={16} />
+              <Controls />
+              <MiniMap />
+            </ReactFlow>
+          </FlowDirectionProvider>
         </main>
 
         {selectedNode && workflow && (

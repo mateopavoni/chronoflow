@@ -22,11 +22,21 @@ Flow:
      c. For each completed task:
         - Persist ExecutionEvent (running → completed|failed).
         - Save output in context[node_id].
-        - Decrement in-degree of successors.
-        - If successor reaches in-degree 0 → add to ready.
-        - For branch nodes: prune the non-taken arm (mark as skipped).
+        - Resolve successors' in-degree (see below).
+        - For branch nodes: resolve the non-taken arm's edge as "skipped".
   4. Stop when ready is empty AND no tasks are pending.
   5. Return the final context.
+
+Skip resolution (fan-in-safe):
+  A node's in-degree is resolved one INCOMING EDGE at a time, and each edge
+  resolves either via completion (a predecessor ran) or via skip (a branch
+  pruned that edge). A node only becomes "skipped" once ALL of its incoming
+  edges resolved via skip — if at least one predecessor actually completes,
+  the node goes to `ready` and runs normally. This makes merge/fan-in nodes
+  downstream of a branch (e.g. `branch -> (a|b) -> end`) work correctly:
+  pruning the not-taken arm only resolves the ONE edge into `end`, it does
+  NOT mark `end` itself skipped — `end` still waits for its other (live)
+  predecessor to complete.
 
 Sequence counter: global monotonic int per run.
   - "running" event: sequence N
@@ -93,6 +103,12 @@ async def run_graph(
         in_degree[edge.target] += 1
         successors[edge.source].append(edge.target)
         predecessor_edges[edge.target].append(edge)
+
+    # Immutable snapshot of each node's total incoming-edge count — used to
+    # tell "all predecessors skipped" apart from "some predecessor is still live".
+    total_predecessors: dict[str, int] = dict(in_degree)
+    # How many of a node's incoming edges resolved via skip (not completion).
+    skip_credits: dict[str, int] = defaultdict(int)
 
     # ── Ready set: nodes with no unmet predecessors ──────────────────────
     # Initially only `start` has in-degree 0.
@@ -167,35 +183,46 @@ async def run_graph(
         await _persist_event(event)
         return event
 
-    # ── Prune: mark all nodes reachable from a pruned subtree as skipped ──
+    # ── Per-edge resolution: skip and completion both satisfy in-degree ──
 
-    async def _prune_subtree(start_node_id: str) -> None:
-        """Mark start_node_id and all its (non-yet-launched) descendants as skipped.
+    async def _finalize_if_ready(node_id: str) -> None:
+        """Called once node_id's in-degree hits 0 — decide skipped vs ready.
 
-        Called when a branch node resolves and we know one arm won't execute.
-        We do BFS from the pruned root and mark every reachable node that
-        hasn't been launched yet as skipped.
+        Only marks the node skipped when EVERY incoming edge resolved via
+        skip. If at least one predecessor actually completed, the node runs.
         """
-        to_skip: list[str] = [start_node_id]
-        while to_skip:
-            nid = to_skip.pop()
-            if nid in skipped or nid in launched:
-                continue
-            skipped.add(nid)
-            # Emit a skipped event immediately
+        if node_id in launched or node_id in skipped:
+            return
+        if in_degree[node_id] > 0:
+            return
+        if total_predecessors[node_id] > 0 and skip_credits[node_id] >= total_predecessors[node_id]:
+            skipped.add(node_id)
             snapshot = dict(context)  # snapshot at prune time
             await _emit_terminal(
-                node_id=nid,
+                node_id=node_id,
                 status="skipped",
                 snapshot=snapshot,
                 output=None,
                 error="Branch not taken",
                 started_at=_utcnow(),
             )
-            # Propagate skip to successors
-            for child_id in successors.get(nid, []):
-                if child_id not in skipped and child_id not in launched:
-                    to_skip.append(child_id)
+            for child_id in successors.get(node_id, []):
+                await _on_predecessor_skipped(child_id)
+        else:
+            ready.add(node_id)
+
+    async def _on_predecessor_completed(node_id: str) -> None:
+        if node_id in launched or node_id in skipped:
+            return
+        in_degree[node_id] -= 1
+        await _finalize_if_ready(node_id)
+
+    async def _on_predecessor_skipped(node_id: str) -> None:
+        if node_id in launched or node_id in skipped:
+            return
+        skip_credits[node_id] += 1
+        in_degree[node_id] -= 1
+        await _finalize_if_ready(node_id)
 
     # ── Node execution wrapper ───────────────────────────────────────────
 
@@ -288,15 +315,11 @@ async def run_graph(
                             continue
                         edge_label = edge.data.branch if edge.data else None
                         if edge_label == pruned_label:
-                            # This is the not-taken branch — prune it
-                            await _prune_subtree(edge.target)
+                            # This is the not-taken branch — resolve only this edge
+                            await _on_predecessor_skipped(edge.target)
 
-            # ── Decrement in-degree of successors ─────────────────────────
+            # ── Resolve successors' in-degree via this completion ─────────
             for child_id in successors.get(node_id, []):
-                if child_id in skipped:
-                    continue  # already pruned
-                in_degree[child_id] -= 1
-                if in_degree[child_id] == 0:
-                    ready.add(child_id)
+                await _on_predecessor_completed(child_id)
 
     return context
