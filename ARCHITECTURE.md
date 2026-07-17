@@ -336,3 +336,22 @@ también quedó limitado (5/min/IP) — antes solo `login` lo estaba.
 4. El frontend abre `/runs/{id}`: recibe eventos en vivo por **WebSocket** y, al terminar,
    permite **time-travel** con el scrubber sobre los `ExecutionEvent` persistidos.
 5. **Replay** crea una corrida nueva e idéntica para reproducir el estado.
+
+---
+
+## 9. Deploy en producción
+
+Demo en vivo: **https://chronoflow.mateopavoni.com.ar/**.
+
+- **Host:** VPS propio, orquestado con **Dokku** (`chronoflow-api` y `chronoflow-web` como apps
+  separadas, cada una con su propio `git push` de deploy — ver `deploy.ps1` para el flujo manual).
+- **CI/CD:** `.github/workflows/deploy.yml` — push a `main` en GitHub dispara `git push --force`
+  a ambos remotos de Dokku (mismo modelo que `deploy.ps1`, corriendo en runner en vez de local).
+- **DB:** Postgres gestionado por Dokku (plugin), migraciones vía `alembic upgrade head` en el
+  release de `chronoflow-api`.
+- **Env obligatorias en prod** (ver `.env.example`): `JWT_SECRET` (la app no bootea con el default
+  inseguro si `ENV=prod`), `DATABASE_URL`, `CORS_ORIGINS` (dominio real del front, sin wildcard),
+  `WEBSOCKETS_MAX_LINE_LENGTH=32768` (cookies de sesión grandes rompían el handshake del WS con
+  el límite default de la librería — ver §4 y Quirks en `.claude/CLAUDE.md`).
+- **Nginx** (delante de `chronoflow-web`): `large_client_header_buffers 8 32k` — mismo problema de
+  cookies grandes, pero del lado del proxy en vez del WS.
