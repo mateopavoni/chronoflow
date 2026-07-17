@@ -5,10 +5,18 @@
 > **Time-Travel Debugging**: recorré, auditá y reproducí el estado histórico de cualquier
 > ejecución, nodo por nodo.
 
+[![demo](https://img.shields.io/badge/demo-live-brightgreen)](https://chronoflow.mateopavoni.com.ar/)
 ![stack](https://img.shields.io/badge/stack-React%20Flow%20·%20FastAPI%20·%20PostgreSQL%20·%20asyncio-2b2b2b)  ·  ![license](https://img.shields.io/badge/license-proprietary-red)
-<!-- Cuando haya deploy: reemplazar por [![demo](https://img.shields.io/badge/demo-live-brightgreen)](URL_REAL) -->
 
 Stack: **React Flow · FastAPI · PostgreSQL · asyncio**
+
+### 🔗 Demo en vivo
+
+**[chronoflow.mateopavoni.com.ar](https://chronoflow.mateopavoni.com.ar/)** — registrate con cualquier
+email (no hay verificación, es una demo) y tu cuenta arranca con **3 workflows de ejemplo** ya
+cargados para explorar las features sin armar nada desde cero. Deployado en un VPS propio vía
+**Dokku** (`apps/api` y `apps/web` como apps separadas), con deploy automático en cada push a
+`main` (`.github/workflows/deploy.yml`).
 
 ### UI — "Conductor OS" (tema claro / oscuro)
 
@@ -30,16 +38,35 @@ cada ejecución como una secuencia de **snapshots inmutables**: podés rebobinar
 en cada instante, qué nodos corrieron, en qué orden (incluido el **paralelismo**) y con qué
 payload de entrada/salida. Es un "debugger con viaje en el tiempo" para workflows.
 
+**No es un CRUD con formularios.** El valor está en tres piezas de ingeniería real:
+
+1. **Paralelismo real, no simulado** — el scheduler corre por *ready-set* (no por niveles): dos
+   ramas independientes con `delay(3s)` y `delay(1s)` terminan en **~3s, no 4s**. Comprobable en
+   la demo con un cronómetro.
+2. **Time-Travel Debugging** sobre un log `ExecutionEvent` **append-only** — el scrubber no
+   re-ejecuta nada, reconstruye el estado del DAG en cualquier instante a partir de snapshots
+   inmutables. La función que lo hace es pura y está testeada.
+3. **Seguridad tratada como feature, no como afterthought**: evaluador de condiciones propio
+   (nunca `eval`), autorización por recurso con `owner_id` (un IDOR real se encontró y se cerró,
+   documentado sin vueltas), guard anti-SSRF en el nodo `http`, rate limiting. Ver [`ARCHITECTURE.md`](./ARCHITECTURE.md) §7.
+
 ### Features
-- **Editor visual de DAG** (React Flow): arrastrá nodos, conectá edges, configurá cada paso.
+- **Editor visual de DAG** (React Flow): arrastrá nodos, conectá edges, configurá cada paso. Undo/redo, copy/paste, import/export JSON, auto-arrange.
 - **Ejecución paralela asíncrona**: scheduler por *ready-set* — ramas independientes corren a la vez (dos `delay(3s)` y `delay(1s)` en paralelo ⇒ ~3s, no 4s).
-- **Nodos**: `start · transform · http · delay · branch · end`.
-- **Expresiones JSONPath** para mapear payloads entre nodos + plantillas en URLs/bodies.
-- **Branches condicionales** con evaluador propio y **seguro** (sin `eval`).
 - **Time-Travel Debugging**: timeline scrubber paso a paso sobre `ExecutionEvent` append-only.
 - **Replay**: reproducí una corrida idéntica desde su payload de disparo.
 - **Live**: seguimiento en vivo de la corrida por WebSocket.
+- **Nodos**: `start · transform · http · delay · branch · end`.
+- **Expresiones JSONPath** para mapear payloads entre nodos + plantillas en URLs/bodies.
+- **Branches condicionales** con evaluador propio y **seguro** (sin `eval`).
+- **Auth + multi-tenant**: registro/login con JWT en cookie httpOnly; cada cuenta ve solo sus propios workflows/runs (autorización por recurso, no solo gate de UI).
+- **SSRF guard + rate limiting**: el nodo `http` bloquea IPs privadas/loopback/metadata de cloud; login/registro/runs están rate-limiteados.
 - **UI "Conductor OS"**: estética Swiss Minimalist / consola industrial, con **tema claro/oscuro** (toggle persistido, respeta `prefers-color-scheme`) e íconos SVG (`lucide-react`).
+
+### En números
+**154 tests** (108 backend + 46 frontend) · **11 pull requests** mergeadas con revisión propia
+(historial real, no un solo commit gigante) · deploy en producción con CI/CD propio · 0
+desalineaciones en la auditoría de contrato front↔back.
 
 ---
 
@@ -90,8 +117,10 @@ npm run dev                        # http://localhost:5173
 
 ## Probalo en 2 minutos
 
-Al levantar, el backend **siembra 3 workflows de ejemplo** automáticamente. No hace falta crear nada
-para ver las features clave. Entrá a la web (`:8080` con Docker, `:5173` en dev) y:
+Andá a **[chronoflow.mateopavoni.com.ar](https://chronoflow.mateopavoni.com.ar/)** (o `:8080`/`:5173`
+en local) y **registrate** con cualquier email — no hay verificación, es una demo. Al crear la
+cuenta el backend **siembra 3 workflows de ejemplo** automáticamente. No hace falta armar nada
+para ver las features clave:
 
 **1. Paralelismo real** — abrí **"Parallel Delays Demo"** → **Run** con payload `{}`.
 Dos `delay` (3s y 1s) corren a la vez: la corrida termina en **~3s, no 4s**. En `/runs/:id` movés
@@ -115,8 +144,10 @@ En `/runs/:id` recorré los **snapshots inmutables** por nodo (input/output en c
 
 ## Tests
 ```bash
-cd apps/api && pytest        # engine (paralelismo, ciclos, JSONPath, time-travel) + endpoints
-cd apps/web && npm run test  # Vitest (componentes + hooks)
+cd apps/api && pytest        # 108 tests: engine (paralelismo, ciclos, JSONPath, time-travel),
+                              # auth, autorización (IDOR), SSRF guard, endpoints
+cd apps/web && npm run test  # 46 tests: Vitest (lib puras, cliente API, componentes)
+npx playwright test --config e2e/playwright.config.ts  # crear → run → time-travel, 3 viewports (requiere stack levantado)
 ```
 
 ---
