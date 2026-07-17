@@ -373,6 +373,86 @@ async def test_fan_in_after_chained_skip_false_branch(db_session, session_factor
         assert "end" in refreshed.final_payload
 
 
+def _branch_direct_fanin_graph(delay_seconds: float = 0.15) -> dict:
+    """start → branch (true: tr-true | false: merge) → end, PLUS start → delay-c → merge.
+
+    `merge` is a DIRECT successor of `br` via the pruned edge AND has a second,
+    slow, unrelated predecessor (`delay-c`). Regression for a bug where the
+    scheduler resolved the SAME pruned edge twice (once as skip, once as a
+    plain "completed" via the generic successors loop) — the double resolution
+    let `merge` reach in-degree 0 and run right after `br`, before `delay-c`
+    actually finished, using a context missing `delay-c`'s output.
+    """
+    return {
+        "nodes": [
+            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "S", "config": {}}},
+            {"id": "br", "type": "branch", "position": {"x": -100, "y": 100}, "data": {"label": "Br", "config": {"condition": "$.trigger.amount > 50"}}},
+            {"id": "delay-c", "type": "delay", "position": {"x": 100, "y": 100}, "data": {"label": "Delay C", "config": {"seconds": delay_seconds}}},
+            {"id": "tr-true", "type": "transform", "position": {"x": -200, "y": 200}, "data": {"label": "High", "config": {"mappings": {"path": "$.trigger.amount"}}}},
+            {"id": "merge", "type": "transform", "position": {"x": 0, "y": 200}, "data": {"label": "Merge", "config": {"mappings": {"c": "$.delay-c.waited"}}}},
+            {"id": "end", "type": "end", "position": {"x": 0, "y": 300}, "data": {"label": "End", "config": {}}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start", "target": "br"},
+            {"id": "e2", "source": "start", "target": "delay-c"},
+            {"id": "e3", "source": "br", "target": "tr-true", "data": {"branch": "true"}},
+            {"id": "e4", "source": "br", "target": "merge", "data": {"branch": "false"}},
+            {"id": "e5", "source": "delay-c", "target": "merge"},
+            {"id": "e6", "source": "tr-true", "target": "end"},
+            {"id": "e7", "source": "merge", "target": "end"},
+        ],
+    }
+
+
+async def test_fan_in_node_waits_for_slow_predecessor_when_other_edge_is_pruned(
+    db_session, session_factory, test_user_id
+):
+    """`merge` must wait for `delay-c` even though its OTHER edge (from `br`) was pruned.
+
+    Before the fix, `br` completing resolved `merge`'s pruned edge twice (skip +
+    completed), so `merge` ran immediately with `delay-c` still in flight and
+    silently lost its output (JSONPath resolves missing keys to None instead of
+    raising). Asserting `merge.c == delay_seconds` proves it waited for the real
+    predecessor instead of racing ahead.
+    """
+    delay_seconds = 0.15
+    wf = Workflow(
+        owner_id=test_user_id,
+        name="direct-fanin-test",
+        graph=_branch_direct_fanin_graph(delay_seconds),
+    )
+    db_session.add(wf)
+    await db_session.flush()
+
+    run = WorkflowRun(
+        workflow_id=wf.id,
+        status="pending",
+        trigger_payload={"amount": 100},  # 100 > 50 → true taken, false (→ merge) pruned
+    )
+    db_session.add(run)
+    await db_session.commit()
+
+    async with session_factory() as session:
+        await execute_run(run_id=run.id, session=session)
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert refreshed.status == "completed"
+        assert refreshed.final_payload["merge"]["c"] == delay_seconds
+
+        stmt = select(ExecutionEvent).where(ExecutionEvent.run_id == run.id).order_by(ExecutionEvent.sequence)
+        result = await s.execute(stmt)
+        events = result.scalars().all()
+
+    events_by_node: dict[str, set[str]] = {}
+    for e in events:
+        events_by_node.setdefault(e.node_id, set()).add(e.status)
+
+    assert "completed" in events_by_node["merge"]
+    assert "skipped" not in events_by_node["merge"]
+    assert "completed" in events_by_node["delay-c"]
+
+
 # ─── Test: time-travel sequence ordering ─────────────────────────────────────
 
 
