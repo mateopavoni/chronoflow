@@ -304,22 +304,27 @@ async def run_graph(
                 # Save output so downstream nodes can resolve JSONPath against it
                 context[node_id] = output
 
-                # ── Branch pruning ────────────────────────────────────────
-                if node.type == "branch":
-                    result: bool = output.get("result", False) if output else False
-                    pruned_label = "false" if result else "true"
-
-                    # Identify which successors belong to which branch label
-                    for edge in graph.edges:
-                        if edge.source != node_id:
-                            continue
-                        edge_label = edge.data.branch if edge.data else None
-                        if edge_label == pruned_label:
-                            # This is the not-taken branch — resolve only this edge
-                            await _on_predecessor_skipped(edge.target)
+            pruned_label: str | None = None
+            if error_msg is None and node.type == "branch":
+                result: bool = output.get("result", False) if output else False
+                pruned_label = "false" if result else "true"
 
             # ── Resolve successors' in-degree via this completion ─────────
-            for child_id in successors.get(node_id, []):
-                await _on_predecessor_completed(child_id)
+            # One resolution per outgoing EDGE (not per successors() dict, which
+            # collapses multi-edge targets and, for a branch, was ALSO resolving
+            # the pruned edge here as "completed" right after `_on_predecessor_skipped`
+            # already resolved it as skip above — a double resolution of the same
+            # edge that let a fan-in node (pruned-branch-target with another live
+            # predecessor) reach in-degree 0 and run BEFORE its real predecessor
+            # finished, using an incomplete context. Resolving per-edge here keeps
+            # each edge counted exactly once, skip XOR completed.
+            for edge in graph.edges:
+                if edge.source != node_id:
+                    continue
+                edge_label = edge.data.branch if edge.data else None
+                if pruned_label is not None and edge_label == pruned_label:
+                    await _on_predecessor_skipped(edge.target)
+                else:
+                    await _on_predecessor_completed(edge.target)
 
     return context
