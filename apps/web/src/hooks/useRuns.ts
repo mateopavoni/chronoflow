@@ -28,6 +28,15 @@ export function useRun(id: string) {
       if (!data) return 2000
       return data.status === 'running' || data.status === 'pending' ? 2000 : false
     },
+    // React Query's default pauses refetchInterval whenever the tab is
+    // backgrounded (document.visibilityState !== 'visible'). These runs
+    // often finish in well under a second, so it's easy for the run to go
+    // terminal while the tab is momentarily unfocused (switching windows, a
+    // screen recorder's overlay, etc.) — polling then freezes on the last
+    // mid-run snapshot (most nodes stuck "pending") and never checks again
+    // until the user manually refocuses or reloads, since the terminal
+    // status is never observed to stop the interval logic above either.
+    refetchIntervalInBackground: true,
   })
 
   // When a run finishes, invalidate events cache (React Query v5: no onSuccess in useQuery)
