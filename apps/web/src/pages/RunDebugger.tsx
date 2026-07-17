@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ReactFlow, Background, Controls, type Edge, type Node } from '@xyflow/react'
+import { ReactFlow, Background, Controls, type Edge, type Node, type ReactFlowInstance } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, ChevronLeft, ChevronRight, Radio, RotateCcw, SkipBack, SkipForward } from 'lucide-react'
 
@@ -137,6 +137,16 @@ export function RunDebugger() {
     setSelectedNodeId((prev) => (prev === node.id ? null : node.id))
   }, [])
 
+  // fitView is a one-shot prop — it only frames whatever nodes exist the
+  // instant React Flow first measures them. Since this component instance is
+  // reused across runs (route param change, e.g. after Replay navigates to a
+  // new run id), that one-time fit goes stale as soon as a different run's
+  // node layout is shown. Refit imperatively instead, keyed on the run id.
+  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null)
+  useEffect(() => {
+    if (flowNodes.length > 0) void reactFlowInstanceRef.current?.fitView()
+  }, [id, flowNodes.length])
+
   async function handleReplay() {
     try {
       const newRun = await replayMutation.mutateAsync(id)
@@ -221,7 +231,10 @@ export function RunDebugger() {
                 nodeTypes={DEBUG_NODE_TYPES}
                 onNodeClick={onNodeClick}
                 onPaneClick={() => setSelectedNodeId(null)}
-                fitView
+                onInit={(instance) => {
+                  reactFlowInstanceRef.current = instance
+                  if (flowNodes.length > 0) void instance.fitView()
+                }}
                 nodesDraggable={false}
                 nodesConnectable={false}
                 elementsSelectable
