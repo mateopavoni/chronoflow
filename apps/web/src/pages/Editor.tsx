@@ -2,15 +2,18 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ReactFlow,
+  ReactFlowProvider,
   Background,
   Controls,
   MiniMap,
   addEdge,
   useEdgesState,
   useNodesState,
+  useUpdateNodeInternals,
   type Connection,
   type Edge,
   type Node,
+  type ReactFlowInstance,
 } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { ArrowLeft, CheckCircle2, Columns3, HelpCircle, LayoutGrid, Play, Redo2, Rows3, Undo2, XCircle } from 'lucide-react'
@@ -134,6 +137,21 @@ export function Editor() {
   const [importError, setImportError] = useState<string | null>(null)
   const [showImportHelp, setShowImportHelp] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // fitView is a one-shot prop — it only frames whatever nodes exist the
+  // instant React Flow first measures them. Refitting imperatively once real
+  // node data has landed avoids a stale/wrong viewport hiding nodes.
+  const reactFlowInstanceRef = useRef<ReactFlowInstance | null>(null)
+  const hasFitRef = useRef(false)
+  useEffect(() => {
+    hasFitRef.current = false
+  }, [id])
+  useEffect(() => {
+    if (!hasFitRef.current && nodes.length > 0 && reactFlowInstanceRef.current) {
+      void reactFlowInstanceRef.current.fitView()
+      hasFitRef.current = true
+    }
+  }, [id, nodes.length])
 
   if (workflow && !initialized) {
     setNodes(workflow.graph.nodes.map(toFlowNode))
@@ -541,32 +559,35 @@ export function Editor() {
         <NodePalette onAdd={addNode} />
 
         <main className="relative flex-1 dot-matrix" aria-label="Workflow canvas">
-          <FlowDirectionProvider value={direction}>
-            <ReactFlow
-              nodes={nodes}
-              edges={edges}
-              onNodesChange={onNodesChange}
-              onEdgesChange={onEdgesChange}
-              onConnect={onConnect}
-              onNodeDragStart={() => takeSnapshot()}
-              deleteKeyCode={null}
-              multiSelectionKeyCode={['Shift']}
-              nodeTypes={NODE_TYPES}
-              onNodeClick={(e, node) => {
-                // Shift+click is a multi-select gesture — don't hijack it to open
-                // the single-node config drawer.
-                if (e.shiftKey) return
-                setSelectedNodeId(node.id)
-              }}
-              onPaneClick={() => setSelectedNodeId(null)}
-              fitView
-              proOptions={{ hideAttribution: false }}
-            >
-              <Background color={dotColor} gap={16} />
-              <Controls />
-              <MiniMap />
-            </ReactFlow>
-          </FlowDirectionProvider>
+          <ReactFlowProvider>
+            <FlowDirectionProvider value={direction}>
+              <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                onNodeDragStart={() => takeSnapshot()}
+                deleteKeyCode={null}
+                multiSelectionKeyCode={['Shift']}
+                nodeTypes={NODE_TYPES}
+                onNodeClick={(e, node) => {
+                  // Shift+click is a multi-select gesture — don't hijack it to open
+                  // the single-node config drawer.
+                  if (e.shiftKey) return
+                  setSelectedNodeId(node.id)
+                }}
+                onPaneClick={() => setSelectedNodeId(null)}
+                onInit={(instance) => { reactFlowInstanceRef.current = instance }}
+                proOptions={{ hideAttribution: false }}
+              >
+                <Background color={dotColor} gap={16} />
+                <Controls />
+                <MiniMap />
+              </ReactFlow>
+              <NodeInternalsSync direction={direction} nodesRef={nodesRef} />
+            </FlowDirectionProvider>
+          </ReactFlowProvider>
         </main>
 
         {selectedNode && workflow && (
@@ -723,4 +744,17 @@ export function Editor() {
       </Modal>
     </div>
   )
+}
+
+/**
+ * Flipping a Handle's `position` prop moves it visually but doesn't resize
+ * the node, so React Flow's ResizeObserver never notices and keeps routing
+ * edges to the old anchor point. Must be inside ReactFlowProvider.
+ */
+function NodeInternalsSync({ direction, nodesRef }: { direction: FlowDirection; nodesRef: { current: Node[] } }) {
+  const updateNodeInternals = useUpdateNodeInternals()
+  useEffect(() => {
+    for (const n of nodesRef.current) updateNodeInternals(n.id)
+  }, [direction, updateNodeInternals, nodesRef])
+  return null
 }

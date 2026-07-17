@@ -21,6 +21,11 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-chronoflow}:${POSTGRES_PASSWORD:-chronoflow}@db:5432/${POSTGRES_DB:-chronoflow}
       CORS_ORIGINS: http://localhost:5173,http://localhost:8080
       ENV: dev
+      # The WS handshake goes straight to uvicorn (bypasses the nginx buffer
+      # fix in apps/web/nginx.conf). Same root cause: other local apps'
+      # cookies pile up on shared "localhost" and the Cookie header exceeds
+      # the `websockets` lib's 8KB per-line default, so the upgrade gets a 400.
+      WEBSOCKETS_MAX_LINE_LENGTH: "32768"
     ports:
       - "8000:8000"
     depends_on:
