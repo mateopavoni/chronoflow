@@ -75,6 +75,31 @@ desalineaciones en la auditoría de contrato front↔back.
 Monorepo de 3 componentes. El detalle —modelo de dominio, contrato de API, algoritmo del
 scheduler y decisiones técnicas— está en **[`ARCHITECTURE.md`](./ARCHITECTURE.md)**.
 
+```mermaid
+flowchart LR
+    subgraph Client["apps/web — React + Vite"]
+        Editor["Editor (React Flow)"]
+        Debugger["Time-Travel Debugger"]
+    end
+
+    subgraph Server["apps/api — FastAPI"]
+        REST["REST routes\n/workflows /runs /auth"]
+        WS["WebSocket\n/ws/runs/:id"]
+        Engine["Execution Engine\nasyncio ready-set scheduler"]
+    end
+
+    DB[("PostgreSQL\nworkflows · runs · execution_events")]
+    HTTP[["Servicio externo\n(nodo http, SSRF-guarded)"]]
+
+    Editor -- "POST /workflows, /run" --> REST
+    Debugger -- "eventos en vivo" --> WS
+    REST -- "asyncio.Task" --> Engine
+    WS -- "push por ExecutionEvent" --> Engine
+    Engine -- "SQLAlchemy async" --> DB
+    Engine -- "httpx (nodo http)" --> HTTP
+    REST -- "SQLAlchemy async" --> DB
+```
+
 ```
 chronoflow/
 ├── apps/
@@ -139,6 +164,22 @@ En `/runs/:id` recorré los **snapshots inmutables** por nodo (input/output en c
 `start → … → end`. Recordá la regla del validador: **exactamente un `start`** y al menos un `end`.
 
 > Guía de pruebas exhaustiva (rutas de smoke-test, errores esperados, WS en vivo): **[`docs/QA-CHECKLIST.md`](./docs/QA-CHECKLIST.md)**.
+
+---
+
+## Performance
+
+Lighthouse (`npx lighthouse`, Chrome for Testing headless) contra la demo en vivo, 2026-07-20:
+
+| | Performance | Accessibility | Best Practices | SEO |
+|---|---|---|---|---|
+| **Mobile** (throttled, preset default) | **90** | 100 | 100 | 100 |
+| **Desktop** (`--preset=desktop`) | **100** | 100 | 100 | 100 |
+
+Mobile — FCP 2.6s, LCP 3.0s, TBT 0ms, CLS 0.008, TTI 3.0s. Reproducible con:
+```bash
+npx lighthouse https://chronoflow.mateopavoni.com.ar/ --preset=desktop  # o sin --preset para mobile
+```
 
 ---
 
