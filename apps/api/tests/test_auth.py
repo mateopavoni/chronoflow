@@ -77,6 +77,32 @@ async def test_login_rate_limited(client):
 
 
 @pytest.mark.asyncio
+async def test_guest_creates_session_with_seeded_workflows(client):
+    r = await client.post("/api/auth/guest")
+    assert r.status_code == 201
+    assert r.json()["email"].startswith("guest-")
+    assert auth_route.settings.AUTH_COOKIE_NAME in r.cookies
+
+    me = await client.get("/api/auth/me")
+    assert me.status_code == 200
+
+    workflows = await client.get("/api/workflows/")
+    assert workflows.status_code == 200
+    assert len(workflows.json()) == 3
+
+
+@pytest.mark.asyncio
+async def test_guest_rate_limited(client):
+    auth_route._guest_limiter._hits.clear()
+    last = None
+    for _ in range(auth_route._guest_limiter.max_attempts + 2):
+        client.cookies.clear()
+        last = await client.post("/api/auth/guest")
+    assert last is not None and last.status_code == 429
+    auth_route._guest_limiter._hits.clear()
+
+
+@pytest.mark.asyncio
 async def test_register_rate_limited(client):
     auth_route._register_limiter._hits.clear()
 

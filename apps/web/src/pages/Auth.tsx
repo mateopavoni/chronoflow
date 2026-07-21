@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Workflow } from 'lucide-react'
-import { useLogin, useRegister } from '../hooks/useAuth'
+import { useGuestLogin, useLogin, useRegister } from '../hooks/useAuth'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
 
 interface AuthProps {
@@ -13,6 +13,7 @@ export function Auth({ mode }: AuthProps) {
   const navigate = useNavigate()
   const login = useLogin()
   const register = useRegister()
+  const guest = useGuestLogin()
   const mutation = mode === 'login' ? login : register
 
   const [email, setEmail] = useState('')
@@ -31,6 +32,15 @@ export function Auth({ mode }: AuthProps) {
     }
   }
 
+  async function handleGuest() {
+    try {
+      await guest.mutateAsync()
+      navigate('/app')
+    } catch {
+      // Error is shown via guest.isError below; catch avoids an unhandled rejection.
+    }
+  }
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-container-margin">
       <Link to="/" className="mb-8 flex items-center gap-2 text-on-surface">
@@ -43,6 +53,27 @@ export function Auth({ mode }: AuthProps) {
         className="w-full max-w-sm border border-outline-variant bg-surface p-6"
       >
         <h1 className="mb-6 text-headline-md">{title}</h1>
+
+        <button
+          type="button"
+          onClick={() => void handleGuest()}
+          disabled={guest.isPending}
+          className="mb-4 w-full border border-primary bg-background px-4 py-3 font-mono text-code-sm font-bold uppercase tracking-wide text-primary transition-opacity hover:opacity-90 disabled:opacity-50"
+        >
+          {guest.isPending ? 'Preparando demo...' : 'Probar demo con datos de ejemplo'}
+        </button>
+
+        {guest.isError && (
+          <div className="mb-4">
+            <ErrorBanner message={guest.error?.message ?? 'Something went wrong'} />
+          </div>
+        )}
+
+        <div className="mb-4 flex items-center gap-3 text-label-xs uppercase tracking-wide text-on-surface-variant">
+          <div className="h-px flex-1 bg-outline-variant" />
+          o con cuenta
+          <div className="h-px flex-1 bg-outline-variant" />
+        </div>
 
         {mutation.isError && (
           <div className="mb-4">

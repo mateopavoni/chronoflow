@@ -37,6 +37,14 @@ export function useRegister() {
   })
 }
 
+export function useGuestLogin() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => authApi.guest(),
+    onSuccess: (user) => qc.setQueryData(authKeys.me, user),
+  })
+}
+
 export function useLogout() {
   const qc = useQueryClient()
   return useMutation({
