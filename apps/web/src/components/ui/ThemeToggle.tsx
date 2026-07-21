@@ -10,7 +10,7 @@ export function ThemeToggle() {
 
   return (
     <button
-      onClick={toggle}
+      onClick={(e) => toggle({ x: e.clientX, y: e.clientY })}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={isDark ? 'Light mode' : 'Dark mode'}
       className="flex h-6 w-6 items-center justify-center border border-outline-variant text-on-surface-variant transition-colors hover:bg-surface-container-high hover:text-on-surface"

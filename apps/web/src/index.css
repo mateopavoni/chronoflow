@@ -167,3 +167,64 @@ dialog::backdrop {
 .react-flow__attribution a {
   color: rgb(var(--on-surface-variant));
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Theme toggle — reveal via the View Transitions API. theme.ts
+   picks one variant at random per toggle (data-theme-transition
+   on <html>); --theme-x/--theme-y are the click origin.
+   ───────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  ::view-transition-old(root) {
+    animation: none;
+  }
+  ::view-transition-new(root) {
+    animation-duration: 500ms;
+    animation-timing-function: ease-in-out;
+  }
+
+  html[data-theme-transition='circle']::view-transition-new(root) {
+    animation-name: theme-reveal-circle;
+  }
+  html[data-theme-transition='diagonal']::view-transition-new(root) {
+    animation-name: theme-reveal-diagonal;
+  }
+  html[data-theme-transition='horizontal']::view-transition-new(root) {
+    animation-name: theme-reveal-horizontal;
+  }
+  html[data-theme-transition='vertical']::view-transition-new(root) {
+    animation-name: theme-reveal-vertical;
+  }
+
+  @keyframes theme-reveal-circle {
+    from {
+      clip-path: circle(0% at var(--theme-x, 50%) var(--theme-y, 50%));
+    }
+    to {
+      clip-path: circle(150% at var(--theme-x, 50%) var(--theme-y, 50%));
+    }
+  }
+  @keyframes theme-reveal-diagonal {
+    from {
+      clip-path: polygon(0 0, 0 0, 0 0);
+    }
+    to {
+      clip-path: polygon(0 0, 200% 0, 0 200%);
+    }
+  }
+  @keyframes theme-reveal-horizontal {
+    from {
+      clip-path: inset(0 100% 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+  @keyframes theme-reveal-vertical {
+    from {
+      clip-path: inset(100% 0 0 0);
+    }
+    to {
+      clip-path: inset(0 0 0 0);
+    }
+  }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { flushSync } from 'react-dom'
 
 export type Theme = 'light' | 'dark'
 
@@ -15,6 +16,9 @@ function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle('dark', theme === 'dark')
 }
 
+// ponytail: fixed list, add more keyframes in index.css + append here if wanted
+const TRANSITIONS = ['circle', 'diagonal', 'horizontal', 'vertical'] as const
+
 /**
  * Theme hook: keeps the `.dark` class on <html> in sync, persists the choice,
  * and exposes a toggle. The initial class is set by an inline script in
@@ -28,7 +32,22 @@ export function useTheme() {
     localStorage.setItem(STORAGE_KEY, theme)
   }, [theme])
 
-  const toggle = () => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+  const toggle = (origin?: { x: number; y: number }) => {
+    const next = theme === 'dark' ? 'light' : 'dark'
+
+    if (origin) {
+      document.documentElement.style.setProperty('--theme-x', `${origin.x}px`)
+      document.documentElement.style.setProperty('--theme-y', `${origin.y}px`)
+    }
+
+    if (!document.startViewTransition) {
+      setTheme(next)
+      return
+    }
+    document.documentElement.dataset.themeTransition =
+      TRANSITIONS[Math.floor(Math.random() * TRANSITIONS.length)]
+    document.startViewTransition(() => flushSync(() => setTheme(next)))
+  }
 
   return { theme, setTheme, toggle }
 }
