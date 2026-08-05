@@ -76,6 +76,17 @@ describe('API client', () => {
       })
     })
 
+    it('keeps the raw detail on the error so callers can read extra fields', async () => {
+      // The login 401 carries a `clear_email` UX hint alongside the generic
+      // message; only `message` is ever rendered (see pages/Auth.tsx).
+      mockFetch(401, { detail: { message: 'Invalid email or password', clear_email: true } })
+      await expect(post('/auth/login', {})).rejects.toMatchObject({
+        status: 401,
+        message: 'Invalid email or password',
+        detail: { message: 'Invalid email or password', clear_email: true },
+      })
+    })
+
     it('formats Pydantic array detail (loc: msg)', async () => {
       mockFetch(422, {
         detail: [{ loc: ['body', 'trigger_payload'], msg: 'value is not a valid dict', type: 'type_error' }],

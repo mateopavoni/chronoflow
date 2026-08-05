@@ -119,11 +119,17 @@ async def login(
     _login_limiter.check(_client_ip(request))
     result = await session.execute(select(User).where(User.email == body.email.lower()))
     user = result.scalar_one_or_none()
-    # Same generic error whether the email is unknown or the password is wrong.
+    # Same generic *message* whether the email is unknown or the password is wrong —
+    # that string is the only thing the UI ever renders, in both cases.
+    # `clear_email` is a UX hint the form uses to decide whether to keep the typed
+    # email (wrong password → keep it, just retype the password) or clear it
+    # (unknown email → the whole field was wrong). Caveat: it does make the
+    # endpoint an account-existence oracle for a scripted caller; the per-IP login
+    # rate limit above (10/min) is what bounds how far that can be pushed.
     if user is None or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            detail={"message": "Invalid email or password", "clear_email": user is None},
         )
     _set_session_cookie(response, user)
     return user

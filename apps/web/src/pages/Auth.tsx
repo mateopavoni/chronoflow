@@ -1,11 +1,23 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Workflow } from 'lucide-react'
+import { Eye, EyeOff, Workflow } from 'lucide-react'
 import { useGuestLogin, useLogin, useRegister } from '../hooks/useAuth'
 import { ErrorBanner } from '../components/ui/ErrorBanner'
+import { ApiError } from '../api/client'
 
 interface AuthProps {
   mode: 'login' | 'register'
+}
+
+/** True when the API told us the typed email doesn't belong to any account.
+ *  Purely a field-clearing hint — the message shown to the user is the same
+ *  generic one either way (see the login route). */
+function shouldClearEmail(err: unknown): boolean {
+  if (!(err instanceof ApiError) || err.status !== 401) return false
+  const detail = err.detail
+  return typeof detail === 'object' && detail !== null && 'clear_email' in detail
+    ? (detail as { clear_email?: unknown }).clear_email === true
+    : false
 }
 
 /** Login / register form. Both modes share the markup; the mutation differs. */
@@ -18,6 +30,7 @@ export function Auth({ mode }: AuthProps) {
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
 
   const isLogin = mode === 'login'
   const title = isLogin ? 'Sign in' : 'Create account'
@@ -27,8 +40,11 @@ export function Auth({ mode }: AuthProps) {
     try {
       await mutation.mutateAsync({ email, password })
       navigate('/app')
-    } catch {
+    } catch (err) {
       // Error is shown via mutation.isError below; catch avoids an unhandled rejection.
+      // A failed attempt keeps the email so the user only retypes the password —
+      // unless the email itself is the part that was wrong (no such account).
+      if (shouldClearEmail(err)) setEmail('')
     }
   }
 
@@ -96,15 +112,30 @@ export function Auth({ mode }: AuthProps) {
         <label className="mb-1 block font-mono text-label-xs uppercase tracking-wide text-on-surface-variant">
           Password
         </label>
-        <input
-          type="password"
-          required
-          minLength={isLogin ? undefined : 8}
-          autoComplete={isLogin ? 'current-password' : 'new-password'}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mb-6 w-full border border-outline-variant bg-background px-3 py-2 text-body-sm text-on-surface outline-none focus:border-primary"
-        />
+        <div className="relative mb-6">
+          <input
+            type={showPassword ? 'text' : 'password'}
+            required
+            minLength={isLogin ? undefined : 8}
+            autoComplete={isLogin ? 'current-password' : 'new-password'}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full border border-outline-variant bg-background px-3 py-2 pr-10 text-body-sm text-on-surface outline-none focus:border-primary"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
+            aria-pressed={showPassword}
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-on-surface-variant transition-colors hover:text-on-surface focus:text-on-surface focus:outline-none"
+          >
+            {showPassword ? (
+              <EyeOff size={16} aria-hidden="true" />
+            ) : (
+              <Eye size={16} aria-hidden="true" />
+            )}
+          </button>
+        </div>
 
         <button
           type="submit"

@@ -48,6 +48,34 @@ async def test_login_wrong_password_is_401(client):
 
 
 @pytest.mark.asyncio
+async def test_login_401_message_is_identical_but_carries_clear_email_hint(client):
+    """Wrong password vs unknown email: same user-facing text, different UX hint.
+
+    `clear_email` is what the login form uses to decide whether to keep the typed
+    email (wrong password) or wipe it (no such account) — it must never change
+    the message the user actually reads.
+    """
+    await client.post("/api/auth/register", json=CREDS)
+    client.cookies.clear()
+
+    wrong_password = await client.post(
+        "/api/auth/login", json={"email": CREDS["email"], "password": "wrong-password"}
+    )
+    unknown_email = await client.post(
+        "/api/auth/login", json={"email": "nobody@example.com", "password": CREDS["password"]}
+    )
+
+    assert wrong_password.status_code == 401
+    assert unknown_email.status_code == 401
+
+    wp_detail = wrong_password.json()["detail"]
+    ue_detail = unknown_email.json()["detail"]
+    assert wp_detail["message"] == ue_detail["message"] == "Invalid email or password"
+    assert wp_detail["clear_email"] is False
+    assert ue_detail["clear_email"] is True
+
+
+@pytest.mark.asyncio
 async def test_login_then_logout_clears_session(client):
     await client.post("/api/auth/register", json=CREDS)
     client.cookies.clear()

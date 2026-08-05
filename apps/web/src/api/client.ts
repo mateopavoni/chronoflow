@@ -6,6 +6,10 @@ export class ApiError extends Error {
   constructor(
     public readonly status: number,
     message: string,
+    /** Raw `detail` from the response body, for the rare caller that needs a
+     *  structured field out of it (e.g. the login form's `clear_email` hint).
+     *  `message` stays the only thing meant to be rendered to the user. */
+    public readonly detail?: unknown,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -60,7 +64,7 @@ async function parseResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
     const body = isJson ? ((await res.json()) as { detail?: unknown }) : null
     const message = formatDetail(body?.detail) ?? `HTTP ${res.status}: ${res.statusText}`
-    throw new ApiError(res.status, message)
+    throw new ApiError(res.status, message, body?.detail)
   }
 
   return isJson ? ((await res.json()) as T) : (undefined as T)
