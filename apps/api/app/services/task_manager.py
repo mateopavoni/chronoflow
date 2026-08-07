@@ -70,6 +70,17 @@ async def _publish(event: ExecutionEvent) -> None:
 
 
 # ─── Task launcher ────────────────────────────────────────────────────────────
+#
+# run_id → live asyncio.Task registry.
+# asyncio.create_task() does NOT keep a strong reference to the task anywhere
+# by itself — per the stdlib docs, "the event loop only keeps weak references
+# to tasks... if the task is not referenced elsewhere, the garbage collector
+# may destroy it." A background run's task is never awaited by anything, so
+# without a live reference it could be GC'd mid-flight, silently killing the
+# run. Mirrors the `_subscribers` pattern above: module-level registry, added
+# right after creation, cleaned up automatically on completion.
+
+_background_tasks: set[asyncio.Task] = set()
 
 
 def launch_run(run_id: uuid.UUID, session_factory) -> None:
@@ -98,4 +109,8 @@ def launch_run(run_id: uuid.UUID, session_factory) -> None:
                     "Unhandled error in run %s: %s", run_id, exc, exc_info=True
                 )
 
-    asyncio.create_task(_task(), name=f"run-{run_id}")
+    task = asyncio.create_task(_task(), name=f"run-{run_id}")
+    # Keep a strong reference until the task finishes, then let it go —
+    # see the module-level comment above `_background_tasks`.
+    _background_tasks.add(task)
+    task.add_done_callback(_background_tasks.discard)
