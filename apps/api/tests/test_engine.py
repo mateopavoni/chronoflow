@@ -550,3 +550,123 @@ async def test_completed_events_have_duration_ms(db_session, session_factory, te
     for e in events:
         assert e.duration_ms is not None
         assert e.duration_ms >= 0
+
+
+# ─── Test: transform output shaped like {"error": ...} must not be misread
+#     as an executor failure (see NODE_ERROR_KEY in scheduler.py) ────────────
+
+
+def _transform_error_shaped_output_graph() -> dict:
+    """start → transform (whose own mapping produces {"error": "..."}) → end"""
+    return {
+        "nodes": [
+            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "S", "config": {}}},
+            {
+                "id": "tr",
+                "type": "transform",
+                "position": {"x": 0, "y": 100},
+                "data": {"label": "T", "config": {"mappings": {"error": "Not a real failure"}}},
+            },
+            {"id": "end", "type": "end", "position": {"x": 0, "y": 200}, "data": {"label": "End", "config": {}}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start", "target": "tr"},
+            {"id": "e2", "source": "tr", "target": "end"},
+        ],
+    }
+
+
+async def test_transform_output_shaped_like_error_dict_is_not_misclassified_as_failed(
+    db_session, session_factory, test_user_id
+):
+    """A successful `transform` node whose mapping happens to produce
+    {"error": "..."} must still mark the run "completed" — this exact shape
+    collided with the old bare {"error": ...} failure heuristic in runner.py.
+    """
+    wf = Workflow(
+        owner_id=test_user_id,
+        name="error-shaped-output-test",
+        graph=_transform_error_shaped_output_graph(),
+    )
+    db_session.add(wf)
+    await db_session.flush()
+
+    run = WorkflowRun(workflow_id=wf.id, status="pending", trigger_payload={})
+    db_session.add(run)
+    await db_session.commit()
+
+    async with session_factory() as session:
+        await execute_run(run_id=run.id, session=session)
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert refreshed.status == "completed"
+        assert refreshed.final_payload["tr"] == {"error": "Not a real failure"}
+
+
+# ─── Test: `delay` node bounds (see MAX_DELAY_SECONDS in executors.py) ──────
+
+
+def _delay_graph(seconds) -> dict:
+    """start → delay(seconds) → end"""
+    return {
+        "nodes": [
+            {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "S", "config": {}}},
+            {"id": "delay-x", "type": "delay", "position": {"x": 0, "y": 100}, "data": {"label": "D", "config": {"seconds": seconds}}},
+            {"id": "end", "type": "end", "position": {"x": 0, "y": 200}, "data": {"label": "End", "config": {}}},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start", "target": "delay-x"},
+            {"id": "e2", "source": "delay-x", "target": "end"},
+        ],
+    }
+
+
+async def test_delay_negative_seconds_fails_the_node(db_session, session_factory, test_user_id):
+    wf = Workflow(owner_id=test_user_id, name="negative-delay-test", graph=_delay_graph(-5))
+    db_session.add(wf)
+    await db_session.flush()
+
+    run = WorkflowRun(workflow_id=wf.id, status="pending", trigger_payload={})
+    db_session.add(run)
+    await db_session.commit()
+
+    async with session_factory() as session:
+        await execute_run(run_id=run.id, session=session)
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert refreshed.status == "failed"
+
+
+async def test_delay_seconds_are_capped_at_max(db_session, session_factory, test_user_id, monkeypatch):
+    """A `seconds` value above MAX_DELAY_SECONDS is clamped, not honored as-is.
+
+    MAX_DELAY_SECONDS is monkeypatched down to a tiny value so the test itself
+    doesn't have to sleep for real minutes to prove the clamp happened —
+    what matters is that the executed `waited` value equals the cap, not the
+    requested value.
+    """
+    import app.engine.executors as executors_module
+
+    monkeypatch.setattr(executors_module, "MAX_DELAY_SECONDS", 0.05)
+
+    wf = Workflow(
+        owner_id=test_user_id,
+        name="oversized-delay-test",
+        graph=_delay_graph(1000),
+    )
+    db_session.add(wf)
+    await db_session.flush()
+
+    run = WorkflowRun(workflow_id=wf.id, status="pending", trigger_payload={})
+    db_session.add(run)
+    await db_session.commit()
+
+    async with session_factory() as session:
+        await execute_run(run_id=run.id, session=session)
+
+    async with session_factory() as s:
+        refreshed = await s.get(WorkflowRun, run.id)
+        assert refreshed.status == "completed"
+        assert refreshed.final_payload["delay-x"]["waited"] == 0.05

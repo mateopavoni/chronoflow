@@ -121,13 +121,13 @@ async def test_guest_creates_session_with_seeded_workflows(client):
 
 @pytest.mark.asyncio
 async def test_guest_rate_limited(client):
-    auth_route._guest_limiter._hits.clear()
+    # `client` fixture (conftest.py) already resets `_guest_limiter` between
+    # tests, so no manual reset needed here (before or after).
     last = None
     for _ in range(auth_route._guest_limiter.max_attempts + 2):
         client.cookies.clear()
         last = await client.post("/api/auth/guest")
     assert last is not None and last.status_code == 429
-    auth_route._guest_limiter._hits.clear()
 
 
 @pytest.mark.asyncio
