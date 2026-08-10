@@ -1,0 +1,31 @@
+name: guard-coauthor
+
+# Corta cualquier commit con trailer "Co-Authored-By: Claude/Anthropic" antes
+# de que llegue a main, sin depender del hook local (.githooks/commit-msg).
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: No AI co-author trailers
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.after }}
+        run: |
+          if git cat-file -e "$BASE" 2>/dev/null; then
+            hits=$(git log --format=%B "$BASE..$HEAD")
+          else
+            hits=$(git log -1 --format=%B "$HEAD")
+          fi
+          if echo "$hits" | grep -qiE 'Co-Authored-By:.*(claude|anthropic)'; then
+            echo "::error::Co-Authored-By: Claude/Anthropic trailer found. Commits deben ser 100% a nombre del owner."
+            exit 1
+          fi
