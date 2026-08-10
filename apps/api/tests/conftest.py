@@ -86,6 +86,7 @@ async def client(engine, session_factory) -> AsyncGenerator[AsyncClient, None]:
 
     auth_routes._login_limiter._hits.clear()
     auth_routes._register_limiter._hits.clear()
+    auth_routes._guest_limiter._hits.clear()
     wf_routes_for_limiter._run_limiter._hits.clear()
 
     async def override_get_session() -> AsyncGenerator[AsyncSession, None]:

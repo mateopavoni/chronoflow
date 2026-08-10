@@ -63,6 +63,16 @@ from app.schemas.graph import Graph, GraphNode
 # Type alias for the event publisher callback
 EventPublisher = Callable[[ExecutionEvent], Coroutine[Any, Any, None]]
 
+# Sentinel key used to mark a node's context entry as "this node's executor
+# raised" — namespaced so it can't collide with a legitimate node output.
+# A `transform` node's own `mappings` config is user-controlled and could
+# easily produce a real output shaped like {"error": "..."}; that must NOT
+# be mistaken for an executor failure downstream (see runner.py). Kept here
+# (not in executors.py) because the scheduler is the only place that turns
+# a caught exception into a context entry — executors themselves never
+# produce this shape, they raise.
+NODE_ERROR_KEY = "__chronoflow_error__"
+
 
 def _utcnow() -> datetime:
     return datetime.now(UTC)
@@ -287,8 +297,13 @@ async def run_graph(
                     error=error_msg,
                     started_at=started_at,
                 )
-                # Store error in context so downstream can see it (unlikely to be used)
-                context[node_id] = {"error": error_msg}
+                # Store error in context so downstream can see it (unlikely to be used).
+                # Uses the namespaced NODE_ERROR_KEY sentinel, not a bare
+                # {"error": ...} dict — a successful `transform` node can
+                # legitimately produce that exact shape from its own
+                # user-defined mappings, which would otherwise collide with
+                # the failure check in runner.py.
+                context[node_id] = {NODE_ERROR_KEY: error_msg}
                 # NOTE: we continue processing (other branches may still complete).
                 # The runner will mark the run as "failed" at the end.
             else:

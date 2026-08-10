@@ -21,7 +21,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.engine.scheduler import EventPublisher, run_graph
+from app.engine.scheduler import NODE_ERROR_KEY, EventPublisher, run_graph
 from app.models.run import WorkflowRun
 from app.models.workflow import Workflow
 from app.schemas.graph import Graph
@@ -97,12 +97,14 @@ async def execute_run(
         run.status = "failed"
         run.error = run_error
     else:
-        # Check if any node failed (their output will have {"error": ...})
-        # We detect failure by looking at the events — if any event is "failed",
-        # the overall run is "failed".
+        # Check if any node failed (their output will carry the NODE_ERROR_KEY
+        # sentinel set by the scheduler — see scheduler.py). Deliberately NOT a
+        # bare {"error": ...} shape check: a successful `transform` node's own
+        # user-defined mappings can legitimately produce that exact dict as
+        # real output, which would otherwise be misclassified as a failure.
         failed_nodes = [
             k for k, v in final_context.items()
-            if isinstance(v, dict) and "error" in v and len(v) == 1
+            if isinstance(v, dict) and NODE_ERROR_KEY in v
         ]
         if failed_nodes:
             run.status = "failed"

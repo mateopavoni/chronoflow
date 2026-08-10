@@ -270,3 +270,72 @@ async def test_register_seeds_three_example_workflows(client):
     assert resp.status_code == 201
     listing = await client.get("/api/workflows/")
     assert len(listing.json()) == 3
+
+
+# ─── Size limits (DoS guard, see app/schemas/graph.py + workflow.py) ─────────
+
+
+def _oversized_node_graph(count: int) -> dict:
+    """A graph with `count` isolated (unconnected) nodes past the real `start`.
+
+    We only need enough nodes to trip the Field(max_length=...) check — the
+    graph doesn't need to be a valid DAG for the Pydantic-level 422 to fire,
+    since request-body validation runs before graph validation.
+    """
+    nodes = [
+        {"id": "start", "type": "start", "position": {"x": 0, "y": 0}, "data": {"label": "Start", "config": {}}},
+    ]
+    for i in range(count):
+        nodes.append(
+            {
+                "id": f"extra-{i}",
+                "type": "end",
+                "position": {"x": 0, "y": 0},
+                "data": {"label": "End", "config": {}},
+            }
+        )
+    return {"nodes": nodes, "edges": []}
+
+
+async def test_create_workflow_rejects_too_many_nodes(auth_client):
+    resp = await auth_client.post(
+        "/api/workflows/",
+        json={"name": "Too Big", "graph": _oversized_node_graph(201)},
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_workflow_accepts_max_nodes(auth_client):
+    # Exactly at the limit (1 start + 199 extras = 200) must still be accepted.
+    resp = await auth_client.post(
+        "/api/workflows/",
+        json={"name": "Right At The Limit", "graph": _oversized_node_graph(199)},
+    )
+    assert resp.status_code == 201
+
+
+async def test_create_workflow_rejects_oversized_node_config(auth_client):
+    huge_graph = {
+        "nodes": [
+            {
+                "id": "start",
+                "type": "start",
+                "position": {"x": 0, "y": 0},
+                "data": {"label": "Start", "config": {"blob": "x" * 30_000}},
+            },
+            {"id": "end", "type": "end", "position": {"x": 0, "y": 100}, "data": {"label": "End", "config": {}}},
+        ],
+        "edges": [{"id": "e1", "source": "start", "target": "end"}],
+    }
+    resp = await auth_client.post(
+        "/api/workflows/", json={"name": "Huge Config", "graph": huge_graph}
+    )
+    assert resp.status_code == 422
+
+
+async def test_create_workflow_rejects_oversized_name(auth_client):
+    resp = await auth_client.post(
+        "/api/workflows/",
+        json={"name": "x" * 500, "graph": VALID_GRAPH},
+    )
+    assert resp.status_code == 422

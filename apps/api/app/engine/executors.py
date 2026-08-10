@@ -37,6 +37,13 @@ from app.schemas.graph import GraphNode
 
 # ─── Executor registry ──────────────────────────────────────────────────────
 
+# Upper bound on a `delay` node's sleep duration. Without this, an unbounded
+# `seconds` value ties up a scheduler task (and the in-process asyncio.Task
+# pool) indefinitely — a cheap DoS against the demo's single-process runner.
+# A few minutes is generous for demonstrating the ready-set scheduler's
+# parallelism while still bounding worst-case run time.
+MAX_DELAY_SECONDS = 300  # 5 minutes
+
 
 def _assert_public_url(url: str) -> None:
     """SSRF guard for the `http` node: block requests to non-public addresses.
@@ -197,9 +204,22 @@ async def _execute_delay(node: GraphNode, context: dict[str, Any]) -> dict[str, 
     A concrete example: two parallel delay branches (3s + 1s) finish
     in ~3s total (max), not 4s (sum). This is the concrete proof of the
     ready-set scheduler working correctly.
+
+    `seconds` is untrusted (comes from a user-authored workflow config), so
+    it's validated here: a negative value is rejected outright (raising
+    surfaces as this node's "failed" state via the scheduler, rather than
+    silently no-op'ing on asyncio.sleep), and the value is capped at
+    MAX_DELAY_SECONDS to bound worst-case run time.
     """
     config = node.data.config
-    seconds: float = float(config.get("seconds", 1))
+    raw_seconds = config.get("seconds", 1)
+    try:
+        seconds: float = float(raw_seconds)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"delay node: 'seconds' must be a number, got {raw_seconds!r}") from exc
+    if seconds < 0:
+        raise ValueError(f"delay node: 'seconds' must not be negative (got {seconds})")
+    seconds = min(seconds, MAX_DELAY_SECONDS)
     await asyncio.sleep(seconds)
     return {"waited": seconds}
 

@@ -29,6 +29,7 @@ Message format: JSON-serialized ExecutionEventOut (matching the REST contract).
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 from fastapi import APIRouter, Cookie, WebSocket, WebSocketDisconnect
@@ -42,6 +43,8 @@ from app.schemas.run import ExecutionEventOut
 from app.services.task_manager import subscribe, unsubscribe
 
 router = APIRouter()
+
+logger = logging.getLogger("chronoflow.ws")
 
 
 @router.websocket("/runs/{run_id}")
@@ -153,8 +156,10 @@ async def ws_run_events(
     except WebSocketDisconnect:
         pass
     except Exception:
-        # Don't let WS errors crash the server
-        pass
+        # Don't let WS errors crash the server — but a real bug (serialization
+        # failure, DB error mid-stream) must not vanish silently, or production
+        # issues become undiagnosable. Log with run_id for correlation.
+        logger.error("Unhandled error streaming run %s", run_id_str, exc_info=True)
     finally:
         unsubscribe(run_id_str, queue)
         try:
