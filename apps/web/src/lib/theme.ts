@@ -5,7 +5,7 @@ export type Theme = 'light' | 'dark'
 
 const STORAGE_KEY = 'chronoflow-theme'
 
-// ponytail: fixed list, add more keyframes in index.css + append here if wanted
+// fixed list, add more keyframes in index.css + append here if wanted
 const TRANSITIONS = ['circle', 'diagonal', 'horizontal', 'vertical'] as const
 
 function getInitialTheme(): Theme {

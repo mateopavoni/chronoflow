@@ -1,6 +1,6 @@
 """Generic in-memory sliding-window rate limiter.
 
-ponytail: single-process, in-memory — same limitation as the original
+single-process, in-memory — same limitation as the original
 login limiter it's factored out of (see auth.py history). Behind multiple
 workers/replicas this needs Redis; fine for a portfolio demo on one Dokku
 container.

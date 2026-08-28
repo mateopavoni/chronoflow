@@ -9,7 +9,7 @@
 # que es lo que Dokku buildea y redeploya. No toca GitHub (origin).
 param([ValidateSet('all', 'api', 'web')] [string]$target = 'all')
 
-# ponytail: --force porque el remote de Dokku es solo destino de deploy, no fuente
+# --force porque el remote de Dokku es solo destino de deploy, no fuente
 # de verdad; evita "non-fast-forward" cuando rebaseás/amendás en dev. Si algún día
 # querés que rechace pushes raros, sacá el --force.
 if ($target -in 'all', 'api') {

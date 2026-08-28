@@ -12,7 +12,7 @@ const SIBLING_STEP = 140
  * direction 'horizontal' (default): level → X, siblings stacked on Y (left-to-right flow).
  * direction 'vertical': level → Y, siblings spread on X (top-to-bottom flow).
  *
- * ponytail: no real graph-layout library (no dagre/elkjs dependency) — this
+ * no real graph-layout library (no dagre/elkjs dependency) — this
  * is a plain Kahn's-algorithm pass, good enough for this project's simple
  * DAGs (mostly chains, occasional branch/fan-in). A graph with heavy branch
  * crossing will still look busy; swap in a real layout lib if that becomes
