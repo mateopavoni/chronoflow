@@ -1,5 +1,5 @@
 #!/bin/sh
-# ponytail: hard block on AI co-author trailers surviving into a commit.
+# hard block on AI co-author trailers surviving into a commit.
 # Regla del repo: commits a nombre de Mateo, nunca "Co-Authored-By: Claude/Anthropic".
 msg_file="$1"
 tmp="$(mktemp)"
