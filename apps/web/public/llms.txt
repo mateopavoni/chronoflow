@@ -1,0 +1,15 @@
+# ChronoFlow
+
+> Visual DAG-based workflow engine with time-travel debugging.
+
+ChronoFlow lets you design a task graph visually (React Flow), run it with real async parallel processing, pass dynamic payloads between nodes with JSONPath expressions, and audit or replay any run with time-travel debugging (a step-by-step scrubber over immutable per-node snapshots).
+
+## Key pages
+
+- [Landing](https://chronoflow.mateopavoni.com.ar/): product overview and live demo entry point.
+- [Login](https://chronoflow.mateopavoni.com.ar/login) / [Register](https://chronoflow.mateopavoni.com.ar/register): account access — a free account is required to try the editor.
+
+## Notes
+
+- The app itself (`/app/*`) is behind authentication and excluded from indexing (see `robots.txt`).
+- Portfolio/demo project; source available on GitHub (link in the landing footer).

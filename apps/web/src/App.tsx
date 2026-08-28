@@ -6,6 +6,7 @@ import { Auth } from './pages/Auth'
 import { Workflows } from './pages/Workflows'
 import { Editor } from './pages/Editor'
 import { RunDebugger } from './pages/RunDebugger'
+import { NotFound } from './pages/NotFound'
 import { AppLayout } from './components/ui/AppLayout'
 import { RequireAuth } from './components/RequireAuth'
 
@@ -44,6 +45,8 @@ export function App() {
             <Route path="/app/workflows/:id" element={<Editor />} />
             <Route path="/app/runs/:id" element={<RunDebugger />} />
           </Route>
+
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
       <ReactQueryDevtools initialIsOpen={false} />
