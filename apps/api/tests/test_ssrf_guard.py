@@ -24,7 +24,12 @@ def test_blocks_non_public_urls(url):
         _assert_public_url(url)
 
 
-def test_allows_public_url():
+def test_allows_public_url(monkeypatch):
+    # Hermetic: don't depend on real DNS (fails offline / in sandboxed CI).
+    monkeypatch.setattr(
+        "app.engine.executors.socket.getaddrinfo",
+        lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 0))],
+    )
     _assert_public_url("https://example.com/")
 
 
