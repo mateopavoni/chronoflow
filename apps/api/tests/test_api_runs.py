@@ -27,6 +27,20 @@ VALID_GRAPH = {
 }
 
 
+async def _drain_background_runs() -> None:
+    """Wait for in-flight run tasks before the next request.
+
+    The test DB is SQLite + StaticPool (one shared connection), so a background
+    run writing while another request commits can drop that request's pending
+    row ("Could not refresh instance"). Production uses a real pool, so this is
+    a test-infra artifact, not an app bug.
+    """
+    from app.services.task_manager import _background_tasks
+
+    if _background_tasks:
+        await asyncio.gather(*list(_background_tasks), return_exceptions=True)
+
+
 async def _create_workflow_and_run(client) -> tuple[str, str]:
     """Helper: create a workflow and trigger a run. Returns (wf_id, run_id)."""
     wf_resp = await client.post("/api/workflows/", json={
@@ -63,6 +77,7 @@ async def test_list_runs_after_trigger(auth_client):
 
 async def test_list_runs_filter_by_workflow_id(auth_client):
     wf_id, run_id = await _create_workflow_and_run(auth_client)
+    await _drain_background_runs()
 
     # Create another workflow and run
     wf2_resp = await auth_client.post("/api/workflows/", json={
@@ -71,6 +86,7 @@ async def test_list_runs_filter_by_workflow_id(auth_client):
     })
     wf2_id = wf2_resp.json()["id"]
     await auth_client.post(f"/api/workflows/{wf2_id}/run", json={"trigger_payload": {}})
+    await _drain_background_runs()
 
     # Filter by wf_id
     resp = await auth_client.get(f"/api/runs/?workflow_id={wf_id}")
