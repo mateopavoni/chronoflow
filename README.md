@@ -5,18 +5,17 @@
 > **Time-Travel Debugging**: recorré, auditá y reproducí el estado histórico de cualquier
 > ejecución, nodo por nodo.
 
-[![demo](https://img.shields.io/badge/demo-live-brightgreen)](https://chronoflow.mateopavoni.com.ar/)
+![estado](https://img.shields.io/badge/estado-archivado-lightgrey)
 ![stack](https://img.shields.io/badge/stack-React%20Flow%20·%20FastAPI%20·%20PostgreSQL%20·%20asyncio-2b2b2b)  ·  ![license](https://img.shields.io/badge/license-proprietary-red)
 
 Stack: **React Flow · FastAPI · PostgreSQL · asyncio**
 
-### 🔗 Demo en vivo
+### Estado: archivado
 
-**[chronoflow.mateopavoni.com.ar](https://chronoflow.mateopavoni.com.ar/)** — registrate con cualquier
-email (no hay verificación, es una demo) y tu cuenta arranca con **3 workflows de ejemplo** ya
-cargados para explorar las features sin armar nada desde cero. Deployado en un VPS propio vía
-**Dokku** (`apps/api` y `apps/web` como apps separadas), con deploy automático en cada push a
-`main` (`.github/workflows/deploy.yml`).
+La demo pública y su deploy (Dokku en un VPS propio) fueron dados de baja: el proyecto ya no está
+desplegado en ningún lado. Se corre completo en local, con la base y los workflows de ejemplo,
+con un solo comando (ver [Cómo correr](#cómo-correr)). El CI (`.github/workflows/ci.yml`) corre
+los tests de API y web y el build del front.
 
 ### UI — "Conductor OS" (tema claro / oscuro)
 
@@ -64,9 +63,9 @@ payload de entrada/salida. Es un "debugger con viaje en el tiempo" para workflow
 - **UI "Conductor OS"**: estética Swiss Minimalist / consola industrial, con **tema claro/oscuro** (toggle persistido, respeta `prefers-color-scheme`) e íconos SVG (`lucide-react`).
 
 ### En números
-**154 tests** (108 backend + 46 frontend) · **11 pull requests** mergeadas con revisión propia
-(historial real, no un solo commit gigante) · deploy en producción con CI/CD propio · 0
-desalineaciones en la auditoría de contrato front↔back.
+**165 tests** (118 backend + 47 frontend) · PRs mergeadas con revisión propia (historial real,
+no un solo commit gigante) · CI en GitHub Actions · 0 desalineaciones en la auditoría de contrato
+front↔back.
 
 ---
 
@@ -105,7 +104,7 @@ chronoflow/
 ├── apps/
 │   ├── web/   # React + Vite + TS + React Flow   (UI: editor + debugger)
 │   └── api/   # FastAPI + SQLAlchemy 2.x async    (engine + REST + WS)
-├── docker-compose.yml   # db + api + web
+├── docker-compose.yml   # db + api + web (todo local)
 ├── ARCHITECTURE.md      # contrato central
 └── docs/                # capturas, diagramas
 ```
@@ -116,12 +115,13 @@ chronoflow/
 
 ### Opción A — Docker (todo junto, recomendado)
 ```bash
-cp .env.example .env
 docker compose up --build
-# web  → http://localhost:8080
-# api  → http://localhost:8000/docs  (Swagger)
-# db   → localhost:5432
+# web  → http://127.0.0.1:8080
+# api  → http://127.0.0.1:8000/docs  (Swagger)
 ```
+No hace falta `.env`. Postgres no se publica al host (solo la API lo alcanza por la red interna).
+Abrí la web en `127.0.0.1` (no `localhost`): la cookie de sesión es `SameSite=Lax` y el front
+llama a la API en `127.0.0.1:8000`.
 
 ### Opción B — Local (dev)
 ```bash
@@ -142,8 +142,7 @@ npm run dev                        # http://localhost:5173
 
 ## Probalo en 2 minutos
 
-Andá a **[chronoflow.mateopavoni.com.ar](https://chronoflow.mateopavoni.com.ar/)** (o `:8080`/`:5173`
-en local) y **registrate** con cualquier email — no hay verificación, es una demo. Al crear la
+Con el stack levantado, abrí **http://127.0.0.1:8080** (o `:5173` en modo dev) y **registrate** con cualquier email — no hay verificación, es una demo. Al crear la
 cuenta el backend **siembra 3 workflows de ejemplo** automáticamente. No hace falta armar nada
 para ver las features clave:
 
@@ -167,27 +166,11 @@ En `/runs/:id` recorré los **snapshots inmutables** por nodo (input/output en c
 
 ---
 
-## Performance
-
-Lighthouse (`npx lighthouse`, Chrome for Testing headless) contra la demo en vivo, 2026-07-20:
-
-| | Performance | Accessibility | Best Practices | SEO |
-|---|---|---|---|---|
-| **Mobile** (throttled, preset default) | **90** | 100 | 100 | 100 |
-| **Desktop** (`--preset=desktop`) | **100** | 100 | 100 | 100 |
-
-Mobile — FCP 2.6s, LCP 3.0s, TBT 0ms, CLS 0.008, TTI 3.0s. Reproducible con:
-```bash
-npx lighthouse https://chronoflow.mateopavoni.com.ar/ --preset=desktop  # o sin --preset para mobile
-```
-
----
-
 ## Tests
 ```bash
-cd apps/api && pytest        # 108 tests: engine (paralelismo, ciclos, JSONPath, time-travel),
+cd apps/api && pytest        # 118 tests: engine (paralelismo, ciclos, JSONPath, time-travel),
                               # auth, autorización (IDOR), SSRF guard, endpoints
-cd apps/web && npm run test  # 46 tests: Vitest (lib puras, cliente API, componentes)
+cd apps/web && npm run test  # 47 tests: Vitest (lib puras, cliente API, componentes)
 npx playwright test --config e2e/playwright.config.ts  # crear → run → time-travel, 3 viewports (requiere stack levantado)
 ```
 
