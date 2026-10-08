@@ -1,3 +1,6 @@
+# ChronoFlow — stack local completo: `docker compose up --build`
+#   web → http://127.0.0.1:8080    api → http://127.0.0.1:8000/docs
+# Postgres NO se publica al host (solo la API lo alcanza por la red interna).
 services:
   db:
     image: postgres:16-alpine
@@ -5,8 +8,6 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-chronoflow}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chronoflow}
       POSTGRES_DB: ${POSTGRES_DB:-chronoflow}
-    ports:
-      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -14,12 +15,13 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    mem_limit: 256m
 
   api:
     build: ./apps/api
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-chronoflow}:${POSTGRES_PASSWORD:-chronoflow}@db:5432/${POSTGRES_DB:-chronoflow}
-      CORS_ORIGINS: http://localhost:5173,http://localhost:8080
+      CORS_ORIGINS: http://127.0.0.1:8080,http://localhost:8080
       ENV: dev
       # The WS handshake goes straight to uvicorn (bypasses the nginx buffer
       # fix in apps/web/nginx.conf). Same root cause: other local apps'
@@ -27,20 +29,22 @@ services:
       # the `websockets` lib's 8KB per-line default, so the upgrade gets a 400.
       WEBSOCKETS_MAX_LINE_LENGTH: "32768"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       db:
         condition: service_healthy
+    mem_limit: 384m
 
   web:
     build:
       context: ./apps/web
       args:
-        VITE_API_URL: http://localhost:8000
+        VITE_API_URL: http://127.0.0.1:8000
     ports:
-      - "8080:80"
+      - "127.0.0.1:8080:80"
     depends_on:
       - api
+    mem_limit: 64m
 
 volumes:
   pgdata:
