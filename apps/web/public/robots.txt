@@ -4,4 +4,3 @@ Disallow: /app/
 Disallow: /login
 Disallow: /register
 
-Sitemap: https://chronoflow.mateopavoni.com.ar/sitemap.xml
